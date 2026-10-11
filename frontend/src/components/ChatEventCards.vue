@@ -100,8 +100,8 @@ const bookings = (event: ChatEvent) => event.result.data?.bookings as Booking[]
             "
             >Confirm booking
           </ElButton>
-          <ElButton class="m-0!" @click="emit('quick', 'Show other flights for the same search.')"
-            >Show other flights
+          <ElButton class="m-0!" @click="emit('quick', 'Show other flights for the same search.')">
+            Show other flights
           </ElButton>
         </div>
       </div>

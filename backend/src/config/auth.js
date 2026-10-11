@@ -14,6 +14,6 @@ export const authConfig = Object.freeze({
   jwtExpiresIn,
   jwtAlgorithm: "HS256",
   jwtIssuer: "flight-booking-api",
-  jwtAudience: "flight-booking-android",
+  jwtAudience: "flight-booking-api",
   bcryptCost: 12,
 });

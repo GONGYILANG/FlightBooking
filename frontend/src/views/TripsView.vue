@@ -35,7 +35,7 @@ watch(
     confirmedBooking.value = null
     try {
       const [result, receipt] = await Promise.all([
-        listBookings(boundedInteger(route.query.page, 1, 10000), 20, controller.signal),
+        listBookings(boundedInteger(route.query.page, 1, 10000), 5, controller.signal),
         typeof route.query.created === 'string'
           ? getBooking(route.query.created, controller.signal).catch(() => null)
           : Promise.resolve(null),

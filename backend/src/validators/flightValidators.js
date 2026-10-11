@@ -158,14 +158,7 @@ export function validateFlightSearch(request, _response, next) {
     fields,
   );
   const airlineCode = parseAirlineCode(request.query.airlineCode, fields);
-  const passengers = parseInteger(
-    request.query.passengers,
-    "passengers",
-    1,
-    1,
-    9,
-    fields,
-  );
+  const passengers = parseInteger(request.query.passengers, "passengers", 1, 1, 9, fields);
   const page = parseInteger(request.query.page, "page", 1, 1, 10000, fields);
   const limit = parseInteger(request.query.limit, "limit", 20, 1, 50, fields);
 

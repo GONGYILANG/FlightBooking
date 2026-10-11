@@ -17,7 +17,7 @@ const router = createRouter({
     {
       path: '/flights/:flightId',
       component: () => import('../views/FlightDetailsView.vue'),
-      meta: { requiresAuth: true },
+      meta: { requiresAuth: false },
     },
     {
       path: '/flights/:flightId/checkout',
