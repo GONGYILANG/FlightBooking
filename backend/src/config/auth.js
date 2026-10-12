@@ -1,5 +1,8 @@
+process.env.JWT_SECRET ??= "nWOZclLYT-9rL8ddUxYKT3xn4sdoDMz3GSdiCrSPCi-FccwoQ2CeTtGyMt7dkQ-ZB2Xm4Wf_NFctd0xfRnbQKw";
+process.env.JWT_EXPIRES_IN ??= "24h";
+
 const jwtSecret = process.env.JWT_SECRET;
-const jwtExpiresIn = process.env.JWT_EXPIRES_IN || "24h";
+const jwtExpiresIn = process.env.JWT_EXPIRES_IN;
 
 if (!jwtSecret || Buffer.byteLength(jwtSecret, "utf8") < 32) {
   throw new Error("JWT_SECRET must be configured with at least 32 bytes");

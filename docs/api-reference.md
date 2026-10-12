@@ -982,19 +982,6 @@ The current API does not create or physically delete flights. Cancellation repre
 
 ### Administrator and maintenance commands
 
-Report legacy user, booking, flight, schedule, and index migrations:
-
-```powershell
-npm run migrate:admin
-```
-
-Apply the migration during a booking-write maintenance window:
-
-```powershell
-$env:BOOKING_WRITES_PAUSED="true"
-npm run migrate:admin -- --apply
-```
-
 Grant or remove an administrator role:
 
 ```powershell

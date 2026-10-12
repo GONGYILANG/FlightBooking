@@ -44,3 +44,47 @@ The interface supports registration/login, flight search and review, booking man
 Browser requests use `/api/*` for the Node.js backend and `/chat-api/*` for FastAPI. Both booking paths share the same backend validation and inventory rules.
 
 See the [frontend README](frontend/README.md) for development commands and UI conventions.
+
+### Screenshots
+
+The following screenshots show the frontend's booking flow and AI assistant.
+
+#### Sign in
+
+![Sign-in page](docs/screenshots/login.png)
+
+#### Flight search
+
+![Flight search page](docs/screenshots/flight-search.png)
+
+#### Search results
+
+![Flight results page](docs/screenshots/flight-results.png)
+
+#### Flight details
+
+![Flight details page](docs/screenshots/flight-details.png)
+
+#### Seat selection
+
+![Simulated seat selection page](docs/screenshots/seat-selection.png)
+
+#### Simulated payment
+
+![Demo payment page](docs/screenshots/simulated-payment.png)
+
+#### My trips
+
+![Saved bookings page](docs/screenshots/my-trips.png)
+
+#### Booking details
+
+![Booking details page](docs/screenshots/booking-details.png)
+
+#### AI assistant
+
+![AI conversation page](docs/screenshots/ai-assistant.png)
+
+#### Profile
+
+![User profile page](docs/screenshots/profile.png)

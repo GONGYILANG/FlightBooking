@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 
+process.env.MONGODB_URI ??= "mongodb://happywizard0830_db_user:yQcc3WecTqz14L1w@ac-wf3w7z9-shard-00-00.paftlaf.mongodb.net:27017,ac-wf3w7z9-shard-00-01.paftlaf.mongodb.net:27017,ac-wf3w7z9-shard-00-02.paftlaf.mongodb.net:27017/?ssl=true&replicaSet=atlas-3rfmgn-shard-0&authSource=admin&appName=Cluster0";
+process.env.MONGODB_DB_NAME ??= "flightBookingDB";
+
 const maximumConnectionAttempts = 3;
 
 function delay(milliseconds) {
