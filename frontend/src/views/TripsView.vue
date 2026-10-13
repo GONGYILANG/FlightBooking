@@ -100,6 +100,7 @@ function go(page: number) {
         :data="bookings"
         row-key="id"
         size="default"
+        scrollbar-always-on
         class="w-full overflow-hidden rounded-xl border border-slate-200 shadow-sm
          shadow-slate-900/5 [&_th]:bg-slate-50! [&_th]:py-3! [&_th]:font-medium!
          [&_th]:text-slate-500! [&_td]:py-3!"
@@ -145,7 +146,7 @@ function go(page: number) {
             </ElTag>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="Action" width="135" fixed="right">
+        <ElTableColumn label="Action" width="135">
           <template #default="{ row }">
             <RouterLink
               class="inline-flex items-center gap-1 font-medium text-blue-700 hover:underline"

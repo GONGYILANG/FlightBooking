@@ -14,6 +14,7 @@ const emit = defineEmits<{ select: [Flight] }>()
     :data="flights"
     row-key="id"
     size="default"
+    scrollbar-always-on
     class="w-full overflow-hidden rounded-2xl border border-slate-200 shadow-sm
      shadow-slate-900/5 ring-1 ring-slate-900/5 [&_th]:bg-slate-50! [&_th]:py-3!
      [&_th]:font-medium! [&_th]:text-slate-500! [&_td]:py-3! [&_.el-table\_\_row]:transition-colors"
@@ -71,7 +72,7 @@ const emit = defineEmits<{ select: [Flight] }>()
         </strong>
       </template>
     </ElTableColumn>
-    <ElTableColumn label="Action" width="135" fixed="right">
+    <ElTableColumn label="Action" width="135">
       <template #default="{ row }">
         <ElButton
           v-if="selectable"

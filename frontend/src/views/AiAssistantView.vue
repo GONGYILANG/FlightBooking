@@ -12,6 +12,7 @@ const input = ref('')
 const messageList = ref<HTMLElement | null>(null)
 const messageContent = ref<HTMLElement | null>(null)
 const sidebarOpen = ref(false)
+const sidebarCollapsed = ref(false)
 const error = ref('')
 let followLatest = true
 let lastScrollTop = 0
@@ -95,10 +96,12 @@ watch(
 <template>
   <AppShell flush>
     <section
-      class="grid h-[calc(100dvh-6.25rem)] min-h-0 grid-cols-1 sm:h-[calc(100dvh-4rem)]
-       md:grid-cols-[280px_minmax(0,1fr)]"
+      class="grid h-[calc(100dvh-6.25rem)] min-h-0 grid-cols-1 sm:h-[calc(100dvh-4rem)]"
+      :class="{ 'md:grid-cols-[280px_minmax(0,1fr)]': !sidebarCollapsed }"
     >
-      <aside class="hidden overflow-y-auto border-r border-slate-200 bg-surface p-5 md:block">
+      <aside id="conversation-sidebar" 
+        class="hidden overflow-y-auto border-r border-slate-200 bg-surface p-5" 
+        :class="{ 'md:block': !sidebarCollapsed }">
         <ConversationList />
       </aside>
       <ElDrawer
@@ -123,6 +126,14 @@ watch(
                 aria-label="Toggle conversations"
                 :aria-expanded="sidebarOpen"
                 @click="sidebarOpen = true"
+              />
+              <ElButton
+                class="m-0! hidden! size-11! p-0! md:inline-flex!"
+                :icon="Menu"
+                :aria-label="sidebarCollapsed ? 'Show conversations' : 'Hide conversations'"
+                :aria-expanded="!sidebarCollapsed"
+                aria-controls="conversation-sidebar"
+                @click="sidebarCollapsed = !sidebarCollapsed"
               />
               <h1 class="text-xl font-semibold tracking-tight sm:text-2xl">AI Assistant</h1>
             </div>

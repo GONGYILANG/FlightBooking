@@ -109,7 +109,7 @@ const bookings = (event: ChatEvent) => event.result.data?.bookings as Booking[]
         v-else-if="
           (event.tool === 'create_booking' || event.tool === 'cancel_booking') && booking(event)
         "
-        class="grid justify-items-start gap-3 rounded-xl border border-slate-200
+        class="grid max-w-100 justify-items-start gap-3 rounded-xl border border-slate-200
          bg-surface shadow-sm shadow-slate-900/5 p-5 text-sm"
       >
         <ElTag :type="booking(event)?.status === 'CANCELLED' ? 'danger' : 'success'">{{
@@ -127,16 +127,19 @@ const bookings = (event: ChatEvent) => event.result.data?.bookings as Booking[]
       </div>
       <div
         v-else-if="event.tool === 'list_my_bookings'"
-        class="grid gap-3 rounded-xl border border-slate-200 bg-surface shadow-sm
-         shadow-slate-900/5 p-5 text-sm"
+        class="max-w-150 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-surface p-3 text-sm"
       >
         <RouterLink
           v-for="item in bookings(event)"
           :key="item.id"
-          class="font-medium text-blue-700 hover:underline"
+          class="flex justify-between items-center gap-3 py-1.5 text-blue-700 hover:underline"
           :to="`/trips/${item.id}`"
-          >{{ item.bookingReference }} · {{ item.flight.flightNumber }} ·
-          {{ item.status.toLowerCase() }}
+        >
+          <span>
+            {{ item.bookingReference }} · {{ item.flight.flightNumber }} ·
+            {{ item.flight.originAirport.iataCode }} → {{ item.flight.destinationAirport.iataCode }}
+          </span>
+          <span class="text-slate-500">{{ item.status.toLowerCase() }}</span>
         </RouterLink>
         <p v-if="!bookings(event).length" class="text-slate-500">No bookings yet.</p>
       </div>
