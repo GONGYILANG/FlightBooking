@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import {
   ElAlert,
   ElButton,
@@ -8,45 +8,37 @@ import {
   ElTag,
 } from 'element-plus'
 import { ArrowLeft, History, Tickets } from 'lucide-vue-next'
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
-import { ApiError, getAdminUser } from '../api'
-import type { AdminUserDetails } from '../types'
+import { getAdminUser } from '../adminApi.js'
 
 const route = useRoute()
-const details = ref<AdminUserDetails | null>(null)
+const details = ref(null)
 const loading = ref(true)
 const error = ref('')
-const notFound = ref(false)
-const reload = ref(0)
+let controller
 
-watch(
-  [() => route.params.userId, reload],
-  async (_value, _old, cleanup) => {
-    const controller = new AbortController()
-    cleanup(() => controller.abort())
-    loading.value = true
-    error.value = ''
-    notFound.value = false
-    details.value = null
-    try {
-      const result = await getAdminUser(String(route.params.userId), controller.signal)
-      if (!controller.signal.aborted) details.value = result
-    } catch (reason) {
-      if (controller.signal.aborted) return
-      notFound.value = reason instanceof ApiError && reason.code === 'USER_NOT_FOUND'
-      error.value = notFound.value
-        ? 'User not found. This account may no longer exist.'
-        : (reason as Error).message
-    } finally {
-      if (!controller.signal.aborted) loading.value = false
-    }
-  },
-  { immediate: true },
-)
+async function loadUser() {
+  controller?.abort()
+  const request = new AbortController()
+  controller = request
+  loading.value = true
+  error.value = ''
+  try {
+    const result = await getAdminUser(route.params.userId, request.signal)
+    if (!request.signal.aborted) details.value = result
+  } catch (reason) {
+    if (!request.signal.aborted) error.value = reason.message
+  } finally {
+    if (!request.signal.aborted) loading.value = false
+  }
+}
 
-function formatDate(value: string | null) {
+watch(() => route.params.userId, loadUser, { immediate: true })
+onBeforeUnmount(() => controller?.abort())
+
+function formatDate(value) {
   return value ? new Date(value).toLocaleString('en-US') : '—'
 }
 </script>
@@ -54,7 +46,7 @@ function formatDate(value: string | null) {
 <template>
   <AppShell>
     <RouterLink
-      :to="{ path: '/admin/users', query: route.query }"
+      to="/admin/users"
       class="mb-6 inline-flex items-center gap-2 text-sm font-medium text-blue-700 hover:underline"
     >
       <ArrowLeft :size="18" aria-hidden="true" />Back to users
@@ -65,10 +57,10 @@ function formatDate(value: string | null) {
     </div>
     <div v-else-if="error" class="grid gap-4">
       <h1 class="text-2xl font-semibold tracking-tight">
-        {{ notFound ? 'User not found' : 'Unable to load user' }}
+        Unable to load user
       </h1>
       <ElAlert :title="error" type="error" :closable="false" role="alert" />
-      <ElButton v-if="!notFound" class="justify-self-start" @click="reload++">Try again</ElButton>
+      <ElButton class="justify-self-start" @click="loadUser">Try again</ElButton>
     </div>
     <section v-else-if="details" class="space-y-6" aria-labelledby="user-heading">
       <div>
@@ -180,7 +172,7 @@ function formatDate(value: string | null) {
             </ElDescriptionsItem>
             <ElDescriptionsItem label="Reason">
               <span class="whitespace-pre-wrap break-words">
-                {{ details.statusChange.reason || 'No reason recorded' }}
+                {{ details.statusChange.reason }}
               </span>
             </ElDescriptionsItem>
           </ElDescriptions>

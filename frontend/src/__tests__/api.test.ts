@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { ApiError, cancelBooking, getAdminUser, listAdminUsers, deleteChat, getMe, logout, register, searchFlights, sendChat, setAccessToken, setUnauthorizedHandler } from '../api.ts'
+import { ApiError, cancelBooking, deleteChat, getMe, logout, register, searchFlights, sendChat, setAccessToken, setUnauthorizedHandler } from '../api.ts'
+import { getAdminUser, listAdminUsers } from '../adminApi.js'
 
 function mockJson(body: unknown, status = 200) {
   let captured: { path: string; init: RequestInit } | null = null
@@ -93,11 +94,11 @@ test('expired and disabled accounts clear auth, but a stale 401 cannot clear a n
   assert.equal(cleared, 2)
 })
 
-test('admin user list defaults to all users without sending empty filters', async () => {
+test('admin user list leaves default pagination to the backend', async () => {
   const data = { users: [], pagination: { page: 1, limit: 20, totalItems: 0, totalPages: 0 } }
   const captured = mockJson({ data })
   setAccessToken('admin-token')
-  assert.deepEqual(await listAdminUsers({ q: '' }), data)
+  assert.deepEqual(await listAdminUsers({}), data)
   const request = captured()!
   assert.equal(request.path, '/api/admin/users')
   assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer admin-token')
@@ -123,6 +124,27 @@ test('admin user search sends q, both filters, pagination and the abort signal',
   })
   assert.equal(request.init.signal, controller.signal)
   assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer admin-token')
+})
+
+test('admin user query preserves repeated and bare values for backend validation', async () => {
+  const captured = mockJson({ data: { users: [], pagination: {} } })
+  await listAdminUsers({ q: ['Maya', 'Chen'], status: null, page: 'abc' })
+  const url = new URL(captured()!.path, 'http://localhost')
+  assert.deepEqual(url.searchParams.getAll('q'), ['Maya', 'Chen'])
+  assert.equal(url.searchParams.get('status'), '')
+  assert.equal(url.searchParams.get('page'), 'abc')
+  assert.equal(url.searchParams.has('limit'), false)
+})
+
+test('admin user query does not normalize enum values or truncate the search', async () => {
+  const captured = mockJson({ data: { users: [], pagination: {} } })
+  const q = 'x'.repeat(101)
+  await listAdminUsers({ q, status: ' locked ', role: 'user', limit: '50' })
+  const url = new URL(captured()!.path, 'http://localhost')
+  assert.equal(url.searchParams.get('q'), q)
+  assert.equal(url.searchParams.get('status'), ' locked ')
+  assert.equal(url.searchParams.get('role'), 'user')
+  assert.equal(url.searchParams.get('limit'), '50')
 })
 
 test('admin user details unwrap booking counts and the latest status change', async () => {

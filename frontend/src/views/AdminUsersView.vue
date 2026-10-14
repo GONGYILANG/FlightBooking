@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import {
   ElAlert,
   ElButton,
@@ -14,84 +14,68 @@ import {
   ElTag,
 } from 'element-plus'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-vue-next'
-import { computed, ref, watch } from 'vue'
+import { onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
-import { listAdminUsers } from '../api'
-import { boundedInteger } from '../lib'
-import type { AdminUser, AdminUserListParams, Pagination, User, UserStatus } from '../types'
+import { listAdminUsers } from '../adminApi.js'
 
 const route = useRoute()
 const router = useRouter()
-const users = ref<AdminUser[]>([])
-const pagination = ref<Pagination>({ page: 1, limit: 20, totalItems: 0, totalPages: 0 })
-const query = ref('')
-const status = ref<UserStatus | ''>('')
-const role = ref<User['role'] | ''>('')
+const data = ref(null)
+const search = reactive({ q: '', status: '', role: '' })
 const loading = ref(true)
 const error = ref('')
-const reload = ref(0)
-const statuses: UserStatus[] = ['ACTIVE', 'LOCKED', 'DISABLED']
-const roles: User['role'][] = ['USER', 'ADMIN']
+let controller
 
-const filters = computed<AdminUserListParams>(() => ({
-  q: typeof route.query.q === 'string' ? route.query.q.trim().slice(0, 100) : '',
-  status: statuses.find((value) => value === route.query.status),
-  role: roles.find((value) => value === route.query.role),
-  page: boundedInteger(route.query.page, 1, 10000),
-  limit: 20,
-}))
-const hasFilters = computed(() =>
-  Boolean(filters.value.q || filters.value.status || filters.value.role),
-)
+async function loadUsers() {
+  controller?.abort()
+  const request = new AbortController()
+  controller = request
+  loading.value = true
+  error.value = ''
+  try {
+    const result = await listAdminUsers(route.query, request.signal)
+    if (!request.signal.aborted) data.value = result
+  } catch (reason) {
+    if (!request.signal.aborted) error.value = reason.message
+  } finally {
+    if (!request.signal.aborted) loading.value = false
+  }
+}
 
 watch(
-  [filters, reload],
-  async (_value, _old, cleanup) => {
-    const controller = new AbortController()
-    cleanup(() => controller.abort())
-    query.value = filters.value.q ?? ''
-    status.value = filters.value.status ?? ''
-    role.value = filters.value.role ?? ''
-    loading.value = true
-    error.value = ''
-    users.value = []
-    try {
-      const result = await listAdminUsers(filters.value, controller.signal)
-      if (controller.signal.aborted) return
-      users.value = result.users
-      pagination.value = result.pagination
-    } catch (reason) {
-      if (!controller.signal.aborted) error.value = (reason as Error).message
-    } finally {
-      if (!controller.signal.aborted) loading.value = false
-    }
+  () => route.query,
+  () => {
+    search.q = route.query.q || ''
+    search.status = route.query.status || ''
+    search.role = route.query.role || ''
+    loadUsers()
   },
   { immediate: true },
 )
+onBeforeUnmount(() => controller?.abort())
 
-function applyFilters() {
-  const nextQuery = {
-    ...(query.value.trim() ? { q: query.value.trim() } : {}),
-    ...(status.value ? { status: status.value } : {}),
-    ...(role.value ? { role: role.value } : {}),
-  }
-  void router.push({ path: '/admin/users', query: nextQuery })
+function submitSearch() {
+  router.push({
+    query: {
+      q: search.q || undefined,
+      status: search.status || undefined,
+      role: search.role || undefined,
+    },
+  })
 }
 
-function resetFilters() {
-  query.value = ''
-  status.value = ''
-  role.value = ''
-  void router.push({ path: '/admin/users' })
+function resetSearch() {
+  Object.assign(search, { q: '', status: '', role: '' })
+  router.push({ path: '/admin/users' })
 }
 
-function openUser(user: AdminUser) {
-  void router.push({ path: `/admin/users/${encodeURIComponent(user.id)}`, query: route.query })
+function openUser(user) {
+  router.push(`/admin/users/${encodeURIComponent(user.id)}`)
 }
 
-function go(page: number) {
-  void router.push({ query: { ...route.query, page } })
+function go(page) {
+  router.push({ query: { ...route.query, page } })
 }
 </script>
 
@@ -111,26 +95,26 @@ function go(page: number) {
          shadow-slate-900/5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px_160px_auto]"
         label-position="top"
         aria-label="Search and filter users"
-        @submit.prevent="applyFilters"
+        @submit.prevent="submitSearch"
       >
         <ElFormItem label="Search users" class="min-w-0 sm:col-span-2 lg:col-span-1">
           <ElInput
-            v-model="query"
+            v-model="search.q"
             placeholder="Name or email"
             aria-label="Search users by name or email"
             :prefix-icon="Search"
             :maxlength="100"
             clearable
-            @clear="applyFilters"
+            @clear="submitSearch"
           />
         </ElFormItem>
         <ElFormItem label="Status" class="min-w-0">
           <ElSelect
-            v-model="status"
+            v-model="search.status"
             :empty-values="[null, undefined]"
             aria-label="Filter by status"
             class="w-full"
-            @change="applyFilters"
+            @change="submitSearch"
           >
             <ElOption label="All statuses" value="" />
             <ElOption label="Active" value="ACTIVE" />
@@ -140,11 +124,11 @@ function go(page: number) {
         </ElFormItem>
         <ElFormItem label="Role" class="min-w-0">
           <ElSelect
-            v-model="role"
+            v-model="search.role"
             :empty-values="[null, undefined]"
             aria-label="Filter by role"
             class="w-full"
-            @change="applyFilters"
+            @change="submitSearch"
           >
             <ElOption label="All roles" value="" />
             <ElOption label="User" value="USER" />
@@ -153,7 +137,7 @@ function go(page: number) {
         </ElFormItem>
         <div class="mb-[18px] flex items-end gap-2 sm:col-span-2 lg:col-span-1">
           <ElButton type="primary" native-type="submit" :icon="Search">Search</ElButton>
-          <ElButton @click="resetFilters">Reset</ElButton>
+          <ElButton @click="resetSearch">Reset</ElButton>
         </div>
       </ElForm>
 
@@ -161,9 +145,9 @@ function go(page: number) {
         class="my-6 flex flex-wrap justify-between gap-2 text-sm text-slate-500"
         aria-live="polite"
       >
-        <span>{{ hasFilters ? 'Filtered users' : 'All users' }} · Newest first</span>
-        <span v-if="!loading && !error">
-          {{ pagination.totalItems }} user{{ pagination.totalItems === 1 ? '' : 's' }}
+        <span>Newest first</span>
+        <span v-if="data && !loading && !error">
+          {{ data.pagination.totalItems }} user{{ data.pagination.totalItems === 1 ? '' : 's' }}
         </span>
       </div>
       <div v-if="loading" class="py-8" role="status">
@@ -172,11 +156,11 @@ function go(page: number) {
       </div>
       <div v-else-if="error" class="grid gap-4">
         <ElAlert :title="error" type="error" :closable="false" role="alert" />
-        <ElButton class="justify-self-start" @click="reload++">Try again</ElButton>
+        <ElButton class="justify-self-start" @click="loadUsers">Try again</ElButton>
       </div>
-      <template v-else>
+      <template v-else-if="data">
         <ElTable
-          :data="users"
+          :data="data.users"
           row-key="id"
           size="default"
           scrollbar-always-on
@@ -189,7 +173,7 @@ function go(page: number) {
           <ElTableColumn label="User" min-width="280">
             <template #default="{ row }">
               <RouterLink
-                :to="{ path: `/admin/users/${encodeURIComponent(row.id)}`, query: route.query }"
+                :to="`/admin/users/${encodeURIComponent(row.id)}`"
                 class="font-semibold text-slate-900 hover:text-blue-700 hover:underline"
                 @click.stop
               >
@@ -235,7 +219,7 @@ function go(page: number) {
           <ElTableColumn label="Action" width="145">
             <template #default="{ row }">
               <RouterLink
-                :to="{ path: `/admin/users/${encodeURIComponent(row.id)}`, query: route.query }"
+                :to="`/admin/users/${encodeURIComponent(row.id)}`"
                 :aria-label="`View details for ${row.displayName}`"
                 class="inline-flex items-center gap-1 font-medium text-blue-700 hover:underline"
                 @click.stop
@@ -247,28 +231,26 @@ function go(page: number) {
           <template #empty>
             <div class="grid justify-items-center gap-3 px-4 py-12">
               <p class="font-medium text-slate-700">
-                {{ hasFilters ? 'No users match your search' : 'No users yet' }}
+                No users found
               </p>
               <p class="text-sm text-slate-500">
-                {{ hasFilters
-                  ? 'Try a different name, email, status or role.'
-                  : 'Registered users will appear here.' }}
+                Try a different search or clear the filters.
               </p>
-              <ElButton v-if="hasFilters" @click="resetFilters">Clear filters</ElButton>
+              <ElButton @click="resetSearch">Clear filters</ElButton>
             </div>
           </template>
         </ElTable>
         <ElPagination
-          v-if="pagination.totalPages > 1"
+          v-if="data.pagination.totalPages > 1"
           class="mt-6 justify-center"
           background
           layout="prev, pager, next"
           :pager-count="5"
           :prev-icon="ChevronLeft"
           :next-icon="ChevronRight"
-          :page-size="pagination.limit"
-          :total="pagination.totalItems"
-          :current-page="pagination.page"
+          :page-size="data.pagination.limit"
+          :total="data.pagination.totalItems"
+          :current-page="data.pagination.page"
           aria-label="User pages"
           @update:current-page="go"
         />

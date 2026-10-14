@@ -13,29 +13,6 @@ export interface User {
   role: 'USER' | 'ADMIN'
 }
 
-export interface AdminUser extends User {
-  createdAt: string | null
-  updatedAt: string | null
-}
-
-export interface AdminUserListParams {
-  q?: string
-  status?: UserStatus
-  role?: User['role']
-  page?: number
-  limit?: number
-}
-
-export interface AdminUserDetails {
-  user: AdminUser
-  statusChange: {
-    updatedAt: string | null
-    updatedBy: User | null
-    reason: string | null
-  } | null
-  bookingSummary: { total: number; confirmed: number; cancelled: number }
-}
-
 export interface Airport {
   id: string
   iataCode: string
