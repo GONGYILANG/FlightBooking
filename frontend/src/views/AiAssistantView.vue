@@ -300,8 +300,8 @@ watch(
             native-type="submit"
             :icon="Send"
             :disabled="!chat.canSend || !input.trim()"
-            >Send</ElButton
-          >
+            >Send
+          </ElButton>
           <p class="col-span-full text-xs leading-5 text-slate-500">
             Messages are saved to your account. AI actions use the same booking rules as the Flights
             page.

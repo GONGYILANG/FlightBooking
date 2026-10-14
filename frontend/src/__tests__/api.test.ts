@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { cancelBooking, deleteChat, getMe, logout, register, searchFlights, sendChat, setAccessToken, setUnauthorizedHandler } from '../api.ts'
+import { ApiError, cancelBooking, getAdminUser, listAdminUsers, deleteChat, getMe, logout, register, searchFlights, sendChat, setAccessToken, setUnauthorizedHandler } from '../api.ts'
 
 function mockJson(body: unknown, status = 200) {
   let captured: { path: string; init: RequestInit } | null = null
@@ -91,4 +91,76 @@ test('expired and disabled accounts clear auth, but a stale 401 cannot clear a n
   finish(new Response(JSON.stringify({ error: { code: 'TOKEN_REVOKED' } }), { status: 401 }))
   await assert.rejects(oldRequest)
   assert.equal(cleared, 2)
+})
+
+test('admin user list defaults to all users without sending empty filters', async () => {
+  const data = { users: [], pagination: { page: 1, limit: 20, totalItems: 0, totalPages: 0 } }
+  const captured = mockJson({ data })
+  setAccessToken('admin-token')
+  assert.deepEqual(await listAdminUsers({ q: '' }), data)
+  const request = captured()!
+  assert.equal(request.path, '/api/admin/users')
+  assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer admin-token')
+})
+
+test('admin user search sends q, both filters, pagination and the abort signal', async () => {
+  setAccessToken('admin-token')
+  const captured = mockJson({ data: { users: [], pagination: {} } })
+  const controller = new AbortController()
+  await listAdminUsers(
+    { q: 'Maya + Chen@example.com', status: 'LOCKED', role: 'USER', page: 2, limit: 20 },
+    controller.signal,
+  )
+  const request = captured()!
+  const url = new URL(request.path, 'http://localhost')
+  assert.equal(url.pathname, '/api/admin/users')
+  assert.deepEqual(Object.fromEntries(url.searchParams), {
+    q: 'Maya + Chen@example.com',
+    status: 'LOCKED',
+    role: 'USER',
+    page: '2',
+    limit: '20',
+  })
+  assert.equal(request.init.signal, controller.signal)
+  assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer admin-token')
+})
+
+test('admin user details unwrap booking counts and the latest status change', async () => {
+  setAccessToken('admin-token')
+  const data = {
+    user: {
+      id: 'user',
+      displayName: 'Maya',
+      email: 'maya@example.com',
+      role: 'USER',
+      status: 'LOCKED',
+      createdAt: null,
+      updatedAt: null,
+    },
+    bookingSummary: { total: 10, confirmed: 7, cancelled: 3 },
+    statusChange: { updatedAt: '2026-10-14T02:00:00Z', updatedBy: null, reason: 'Account review' },
+  }
+  const captured = mockJson({ data })
+  const controller = new AbortController()
+  assert.deepEqual(await getAdminUser('user/id', controller.signal), data)
+  assert.equal(captured()!.path, '/api/admin/users/user%2Fid')
+  assert.equal(captured()!.init.signal, controller.signal)
+  assert.equal(new Headers(captured()!.init.headers).get('Authorization'), 'Bearer admin-token')
+})
+
+test('admin user errors preserve USER_NOT_FOUND and ADMIN_REQUIRED without logging out a normal user', async () => {
+  let cleared = 0
+  setUnauthorizedHandler(() => cleared++)
+  for (const [status, code] of [
+    [404, 'USER_NOT_FOUND'],
+    [403, 'ADMIN_REQUIRED'],
+  ] as const) {
+    mockJson({ error: { code, message: 'Unavailable' } }, status)
+    await assert.rejects(
+      getAdminUser('user'),
+      (reason: unknown) =>
+        reason instanceof ApiError && reason.status === status && reason.code === code,
+    )
+  }
+  assert.equal(cleared, 0)
 })

@@ -28,6 +28,9 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
+  if (to.meta.requiresAdmin && auth.user?.role !== 'ADMIN') {
+    return '/flights'
+  }
   if ((to.path === '/login' || to.path === '/register') && auth.isAuthenticated) {
     return '/flights'
   }

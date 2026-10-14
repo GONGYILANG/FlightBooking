@@ -1,4 +1,7 @@
 import type {
+  AdminUser,
+  AdminUserDetails,
+  AdminUserListParams,
   Airport,
   Booking,
   ChatEvent,
@@ -103,6 +106,27 @@ export async function getMe() {
 
 export async function logout() {
   await request<void>('/api/auth/logout', { method: 'POST' }, true)
+}
+
+export async function listAdminUsers(values: AdminUserListParams = {}, signal?: AbortSignal) {
+  const query = toQueryParams({ ...values })
+  return (
+    await request<{ data: { users: AdminUser[]; pagination: Pagination } }>(
+      `/api/admin/users${query.size ? `?${query}` : ''}`,
+      { signal },
+      true,
+    )
+  ).data
+}
+
+export async function getAdminUser(userId: string, signal?: AbortSignal) {
+  return (
+    await request<{ data: AdminUserDetails }>(
+      `/api/admin/users/${encodeURIComponent(userId)}`,
+      { signal },
+      true,
+    )
+  ).data
 }
 
 export async function listAirlines(signal?: AbortSignal) {

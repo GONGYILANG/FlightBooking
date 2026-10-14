@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
-import { CircleUserRound, MessageCircle, Moon, Plane, Sun, Tickets } from 'lucide-vue-next'
+import { CircleUserRound, MessageCircle, Moon, Plane, Sun, Tickets, Users } from 'lucide-vue-next'
+import { computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
 
@@ -8,12 +9,13 @@ defineProps<{ wide?: boolean; flush?: boolean }>()
 const auth = useAuthStore()
 const theme = useThemeStore()
 const route = useRoute()
-const links = [
+const links = computed(() => [
   { to: '/flights', label: 'Flights', icon: Plane },
   { to: '/ai', label: 'AI Assistant', icon: MessageCircle },
   { to: '/trips', label: 'My trips', icon: Tickets },
   { to: '/profile', label: 'Profile', icon: CircleUserRound },
-]
+  ...(auth.user?.role === 'ADMIN' ? [{ to: '/admin/users', label: 'Users', icon: Users }] : []),
+])
 </script>
 
 <template>

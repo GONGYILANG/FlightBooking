@@ -44,6 +44,16 @@ const router = createRouter({
       component: () => import('../views/AiAssistantView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/admin/users',
+      component: () => import('../views/AdminUsersView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/admin/users/:userId',
+      component: () => import('../views/AdminUserDetailsView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
     { path: '/:pathMatch(.*)*', redirect: '/flights' },
   ],
 })
