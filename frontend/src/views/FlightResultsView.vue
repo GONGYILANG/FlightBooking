@@ -86,11 +86,11 @@ function updateSearch(values: Partial<FlightSearchParams>) {
 }
 
 async function loadAirportGroup(code: string, signal: AbortSignal) {
-  const matches = await searchAirports(code, 20, signal)
-  const selected = matches.find((airport) => airport.iataCode === code) ?? null
-  if (!selected) return { selected, airports: matches }
-  const city = await searchAirports(selected.cityName, 20, signal)
-  return { selected, airports: city.filter((airport) => airport.cityName === selected.cityName) }
+  const { airports } = await searchAirports(code, 20, signal)
+  const selected = airports.find((airport) => airport.iataCode === code) ?? null
+  if (!selected) return { selected, airports }
+  const { airports: cityAirports } = await searchAirports(selected.cityName, 20, signal)
+  return { selected, airports: cityAirports.filter((airport) => airport.cityName === selected.cityName) }
 }
 
 watch(
@@ -101,7 +101,7 @@ watch(
     cleanup(() => controller.abort())
     optionsError.value = ''
     try {
-      const [availableAirlines, origins, destinations] = await Promise.all([
+      const [{ airlines: availableAirlines }, origins, destinations] = await Promise.all([
         listAirlines(controller.signal),
         loadAirportGroup(search.value.origin, controller.signal),
         loadAirportGroup(search.value.destination, controller.signal),

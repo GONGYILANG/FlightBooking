@@ -40,7 +40,7 @@ watch(
     notice.value = route.query.created === '1' ? 'Booking confirmed.' : ''
     try {
       const result = await getBooking(String(route.params.bookingId), controller.signal)
-      if (!controller.signal.aborted) booking.value = result
+      if (!controller.signal.aborted) booking.value = result.booking
     } catch (reason) {
       if (!controller.signal.aborted) error.value = (reason as Error).message
     } finally {
@@ -56,8 +56,8 @@ async function confirmCancel() {
   cancelError.value = ''
   try {
     const result = await cancelBooking(booking.value.id)
-    booking.value = result.booking
-    notice.value = result.alreadyCancelled
+    booking.value = result.data.booking
+    notice.value = result.meta.alreadyCancelled
       ? 'This booking was already cancelled.'
       : 'Booking cancelled.'
     dialogOpen.value = false

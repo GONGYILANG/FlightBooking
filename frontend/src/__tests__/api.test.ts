@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { ApiError, cancelBooking, deleteChat, getMe, logout, register, searchFlights, sendChat, setAccessToken, setUnauthorizedHandler } from '../api.ts'
+import {
+  ApiError, cancelBooking, createBooking, deleteChat, getBooking, getChatSession,
+  getFlight, getHealth, getMe, listAirlines, listBookings, listChatSessions, login,
+  logout, register, request, requestBody, searchAirports, searchFlights, sendChat,
+  setAccessToken, setUnauthorizedHandler,
+} from '../api.ts'
 import { getAdminUser, listAdminUsers } from '../adminApi.js'
 
 function mockJson(body: unknown, status = 200) {
@@ -12,6 +17,58 @@ function mockJson(body: unknown, status = 200) {
   }) as typeof fetch
   return () => captured
 }
+
+test('requestBody preserves the response body while request returns only data', async () => {
+  const body = { data: { users: [] }, meta: { page: 1 } }
+  mockJson(body)
+  assert.deepEqual(await requestBody('/example'), body)
+  assert.deepEqual(await request('/example'), body.data)
+})
+
+test('request preserves a null data value without falling back to the response body', async () => {
+  mockJson({ data: null, meta: { message: 'No result' } })
+  assert.equal(await request('/example'), null)
+})
+
+test('ordinary API methods return the entire data object without extracting its properties', async () => {
+  const cases = [
+    { read: () => getMe(), data: { user: { id: 'user' } } },
+    { read: () => getFlight('flight'), data: { flight: { id: 'flight' } } },
+    { read: () => getBooking('booking'), data: { booking: { id: 'booking' } } },
+    { read: () => listAirlines(), data: { airlines: [{ code: 'CX', name: 'Cathay Pacific' }] } },
+    { read: () => searchAirports('HKG'), data: { airports: [{ id: 'airport' }] } },
+    { read: () => listBookings(), data: { bookings: [], pagination: { page: 1 } } },
+    { read: () => listChatSessions(), data: { sessions: [{ sessionId: 'session' }] } },
+    { read: () => getChatSession('session'), data: { session: { sessionId: 'session' } } },
+    { read: () => login('user@example.com', 'demo-password'), data: { user: { id: 'user' }, accessToken: 'token' } },
+  ]
+  for (const { read, data } of cases) {
+    mockJson({ data, meta: { ignored: true } })
+    assert.deepEqual(await read(), data)
+  }
+})
+
+test('health checks preserve their unwrapped response body', async () => {
+  const body = { status: 'ok', timestamp: '2026-10-15T00:00:00Z', database: { status: 'connected' } }
+  mockJson(body)
+  assert.deepEqual(await getHealth(), body)
+})
+
+test('both request variants preserve backend errors and abort errors', async () => {
+  for (const read of [requestBody, request]) {
+    mockJson({ error: {
+      code: 'INVALID_REQUEST', message: 'Invalid page',
+      details: { fields: [{ field: 'page', message: 'page must be an integer' }] },
+    } }, 400)
+    await assert.rejects(read('/example'), (reason: unknown) =>
+      reason instanceof ApiError && reason.status === 400 && reason.code === 'INVALID_REQUEST' &&
+      reason.fields[0]?.field === 'page',
+    )
+    const aborted = new DOMException('Cancelled', 'AbortError')
+    globalThis.fetch = async () => { throw aborted }
+    await assert.rejects(read('/example'), (reason: unknown) => reason === aborted)
+  }
+})
 
 test('flight range pagination uses the search API and preserves filters and abort signal', async () => {
   const data = { flights: [], pagination: { page: 2, limit: 5, totalItems: 25, totalPages: 5 } }
@@ -47,13 +104,20 @@ test('register sends the backend field names', async () => {
 })
 
 test('cancel uses PATCH and the bearer token', async () => {
-  const captured = mockJson({ data: { booking: { id: 'booking' } }, meta: { alreadyCancelled: false } })
+  const body = { data: { booking: { id: 'booking' } }, meta: { alreadyCancelled: false } }
+  const captured = mockJson(body)
   setAccessToken('jwt-value')
-  await cancelBooking('booking')
+  assert.deepEqual(await cancelBooking('booking'), body)
   const request = captured()
   assert.equal(request?.path, '/api/bookings/booking/cancel')
   assert.equal(request?.init.method, 'PATCH')
   assert.equal(new Headers(request?.init.headers).get('Authorization'), 'Bearer jwt-value')
+})
+
+test('booking creation preserves data and idempotent replay metadata', async () => {
+  const body = { data: { booking: { id: 'booking' } }, meta: { idempotentReplay: true } }
+  mockJson(body)
+  assert.deepEqual(await createBooking('flight', 2, 'request-key'), body)
 })
 
 test('chat preserves structured tool events', async () => {
@@ -69,8 +133,8 @@ test('logout and chat deletion send bearer authentication and accept 204', async
     return new Response(null, { status: 204 })
   }) as typeof fetch
   setAccessToken('current-token')
-  await deleteChat('conversation')
-  await logout()
+  assert.equal(await deleteChat('conversation'), undefined)
+  assert.equal(await logout(), undefined)
   assert.deepEqual(calls, [
     { path: '/chat-api/chat/conversation', method: 'DELETE', authorization: 'Bearer current-token' },
     { path: '/api/auth/logout', method: 'POST', authorization: 'Bearer current-token' },

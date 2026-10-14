@@ -43,7 +43,7 @@ watch(
       if (controller.signal.aborted) return
       bookings.value = result.bookings
       pagination.value = result.pagination
-      confirmedBooking.value = receipt?.status === 'CONFIRMED' ? receipt : null
+      confirmedBooking.value = receipt?.booking.status === 'CONFIRMED' ? receipt.booking : null
     } catch (reason) {
       if (!controller.signal.aborted) error.value = (reason as Error).message
     } finally {

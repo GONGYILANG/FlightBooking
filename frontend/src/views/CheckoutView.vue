@@ -136,7 +136,7 @@ watch(
     pending.value = readPending()
     try {
       const result = await getFlight(String(route.params.flightId), controller.signal)
-      if (!controller.signal.aborted) flight.value = result
+      if (!controller.signal.aborted) flight.value = result.flight
     } catch (reason) {
       if (!controller.signal.aborted) error.value = (reason as Error).message
     } finally {
@@ -175,7 +175,7 @@ async function pay() {
     pending.value = attempt
     const result = await createBooking(attempt.flightId, attempt.seatCount, attempt.idempotencyKey)
     if (!active || scope !== generation || owner !== auth.user?.id) return
-    const failure = await router.replace({ path: '/trips', query: { created: result.booking.id } })
+    const failure = await router.replace({ path: '/trips', query: { created: result.data.booking.id } })
     if (
       !failure &&
       owner === auth.user?.id &&

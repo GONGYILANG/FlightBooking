@@ -49,7 +49,8 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = stored.token
     api.setAccessToken(stored.token)
     try {
-      user.value = await api.getMe()
+      const data = await api.getMe()
+      user.value = data.user
     } catch (reason) {
       if (reason instanceof api.ApiError && [401, 403].includes(reason.status)) clear()
     }

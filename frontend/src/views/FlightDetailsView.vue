@@ -55,7 +55,7 @@ watch(
     passengers.value = boundedInteger(route.query.passengers, 1, 9)
     try {
       const result = await getFlight(String(route.params.flightId), controller.signal)
-      if (!controller.signal.aborted) flight.value = result
+      if (!controller.signal.aborted) flight.value = result.flight
     } catch (reason) {
       if (!controller.signal.aborted) error.value = (reason as Error).message
     } finally {

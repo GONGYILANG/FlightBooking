@@ -88,7 +88,7 @@ export const useChatStore = defineStore('chat', () => {
     loadingHistory.value = conversation.persisted
     if (!conversation.persisted) return
     try {
-      const session = await getChatSession(id, controller.signal)
+      const { session } = await getChatSession(id, controller.signal)
       // Ignore replies after logout, cancellation, or selection of another conversation.
       if (controller.signal.aborted || currentId.value !== id) return
       applySession(conversation, session)
@@ -111,7 +111,7 @@ export const useChatStore = defineStore('chat', () => {
     loadingSessions.value = true
     listError.value = ''
     try {
-      const summaries = await listChatSessions(controller.signal)
+      const { sessions: summaries } = await listChatSessions(controller.signal)
       if (controller.signal.aborted) return false
       const drafts = conversations.value.filter(
         (item) => !item.persisted && !summaries.some((summary) => summary.sessionId === item.id),
@@ -214,7 +214,7 @@ export const useChatStore = defineStore('chat', () => {
       if (scope === generation) {
         // A lost POST response may still have saved a completed/failed Turn.
         try {
-          const session = await getChatSession(conversation.id)
+          const { session } = await getChatSession(conversation.id)
           if (scope === generation) applySession(conversation, session)
         } catch (reason) {
           if (

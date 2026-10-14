@@ -76,8 +76,8 @@ onMounted(async () => {
       ).map(async ([key, selected]) => {
         const code = route.query[key]
         if (typeof code !== 'string') return
-        const matches = await searchAirports(code)
-        selected.value = matches.find((airport) => airport.iataCode === code.toUpperCase()) ?? null
+        const { airports } = await searchAirports(code)
+        selected.value = airports.find((airport) => airport.iataCode === code.toUpperCase()) ?? null
       }),
     )
   } catch {

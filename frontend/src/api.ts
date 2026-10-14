@@ -42,7 +42,7 @@ export function setUnauthorizedHandler(handler: () => void) {
   unauthorizedHandler = handler
 }
 
-export async function request<T>(path: string, init: RequestInit = {}, authenticated = false): Promise<T> {
+export async function requestBody<T>(path: string, init: RequestInit = {}, authenticated = false): Promise<T> {
   const requestToken = accessToken
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
@@ -77,70 +77,63 @@ export async function request<T>(path: string, init: RequestInit = {}, authentic
   return body as T
 }
 
-export async function getHealth() {
-  return request<{ status: string }>('/api/health')
+export async function request<T>(path: string, init: RequestInit = {}, authenticated = false): Promise<T> {
+  const body = await requestBody<{ data: T }>(path, init, authenticated)
+  return body.data
 }
 
-export async function login(email: string, password: string) {
-  const response = await request<{ data: { user: User; accessToken: string; expiresIn: string } }>(
+export function getHealth() {
+  return requestBody<{ status: string }>('/api/health')
+}
+
+export function login(email: string, password: string) {
+  return request<{ user: User; accessToken: string; expiresIn: string }>(
     '/api/auth/login',
     { method: 'POST', body: JSON.stringify({ email, password }) },
   )
-  return response.data
 }
 
-export async function register(displayName: string, email: string, password: string) {
-  const response = await request<{ data: { user: User; accessToken: string; expiresIn: string } }>(
+export function register(displayName: string, email: string, password: string) {
+  return request<{ user: User; accessToken: string; expiresIn: string }>(
     '/api/auth/register',
     { method: 'POST', body: JSON.stringify({ displayName, email, password }) },
   )
-  return response.data
 }
 
-export async function getMe() {
-  return (await request<{ data: { user: User } }>('/api/auth/me', {}, true)).data.user
+export function getMe() {
+  return request<{ user: User }>('/api/auth/me', {}, true)
 }
 
-export async function logout() {
-  await request<void>('/api/auth/logout', { method: 'POST' }, true)
+export function logout() {
+  return requestBody<void>('/api/auth/logout', { method: 'POST' }, true)
 }
 
-export async function listAirlines(signal?: AbortSignal) {
-  return (
-    await request<{ data: { airlines: Array<{ code: string; name: string }> } }>('/api/airlines', {
-      signal,
-    })
-  ).data.airlines
+export function listAirlines(signal?: AbortSignal) {
+  return request<{ airlines: Array<{ code: string; name: string }> }>('/api/airlines', { signal })
 }
 
-export async function searchAirports(value: string, limit = 10, signal?: AbortSignal) {
-  const response = await request<{ data: { airports: Airport[] } }>(
+export function searchAirports(value: string, limit = 10, signal?: AbortSignal) {
+  return request<{ airports: Airport[] }>(
     `/api/airports/search?${toQueryParams({ q: value, limit })}`,
     { signal },
   )
-  return response.data.airports
 }
 
-export async function searchFlights(
+export function searchFlights(
   values: FlightSearchParams | FlightRangeSearchParams,
   signal?: AbortSignal
 ) {
-  const response = await request<{ data: FlightSearchResult }>(
+  return request<FlightSearchResult>(
     `/api/flights/search?${toQueryParams({ ...values })}`, { signal },
   )
-  return response.data
 }
 
-export async function getFlight(flightId: string, signal?: AbortSignal) {
-  return (
-    await request<{ data: { flight: Flight } }>(`/api/flights/${encodeURIComponent(flightId)}`,
-      { signal },
-    )
-  ).data.flight
+export function getFlight(flightId: string, signal?: AbortSignal) {
+  return request<{ flight: Flight }>(`/api/flights/${encodeURIComponent(flightId)}`, { signal })
 }
 
-export async function createBooking(flightId: string, seatCount: number, idempotencyKey: string) {
-  const response = await request<{
+export function createBooking(flightId: string, seatCount: number, idempotencyKey: string) {
+  return requestBody<{
     data: { booking: Booking }
     meta: { idempotentReplay: boolean }
   }>(
@@ -148,39 +141,33 @@ export async function createBooking(flightId: string, seatCount: number, idempot
     { method: 'POST', body: JSON.stringify({ flightId, seatCount, source: 'UI', idempotencyKey }) },
     true,
   )
-  return { booking: response.data.booking, idempotentReplay: response.meta.idempotentReplay }
 }
 
-export async function listBookings(page = 1, limit = 20, signal?: AbortSignal) {
-  return (
-    await request<{ data: { bookings: Booking[]; pagination: Pagination } }>(
-      `/api/bookings/me?${toQueryParams({ page, limit })}`,
-      { signal },
-      true,
-    )
-  ).data
+export function listBookings(page = 1, limit = 20, signal?: AbortSignal) {
+  return request<{ bookings: Booking[]; pagination: Pagination }>(
+    `/api/bookings/me?${toQueryParams({ page, limit })}`,
+    { signal },
+    true,
+  )
 }
 
-export async function getBooking(bookingId: string, signal?: AbortSignal) {
-  return (
-    await request<{ data: { booking: Booking } }>(
-      `/api/bookings/${encodeURIComponent(bookingId)}`,
-      { signal },
-      true,
-    )
-  ).data.booking
+export function getBooking(bookingId: string, signal?: AbortSignal) {
+  return request<{ booking: Booking }>(
+    `/api/bookings/${encodeURIComponent(bookingId)}`,
+    { signal },
+    true,
+  )
 }
 
-export async function cancelBooking(bookingId: string) {
-  const response = await request<{
+export function cancelBooking(bookingId: string) {
+  return requestBody<{
     data: { booking: Booking }
     meta: { alreadyCancelled: boolean }
   }>(`/api/bookings/${encodeURIComponent(bookingId)}/cancel`, { method: 'PATCH', body: '{}' }, true)
-  return { booking: response.data.booking, alreadyCancelled: response.meta.alreadyCancelled }
 }
 
-export async function sendChat(message: string, sessionId: string, requestId: string) {
-  return request<{
+export function sendChat(message: string, sessionId: string, requestId: string) {
+  return requestBody<{
     sessionId: string
     requestId: string
     message: string
@@ -193,28 +180,24 @@ export async function sendChat(message: string, sessionId: string, requestId: st
   )
 }
 
-export async function listChatSessions(signal?: AbortSignal) {
-  return (
-    await request<{ data: { sessions: ChatSessionSummary[] } }>(
-      '/chat-api/chat/sessions',
-      { signal },
-      true,
-    )
-  ).data.sessions
+export function listChatSessions(signal?: AbortSignal) {
+  return request<{ sessions: ChatSessionSummary[] }>(
+    '/chat-api/chat/sessions',
+    { signal },
+    true,
+  )
 }
 
-export async function getChatSession(sessionId: string, signal?: AbortSignal) {
-  return (
-    await request<{ data: { session: ChatSession } }>(
-      `/chat-api/chat/sessions/${encodeURIComponent(sessionId)}`,
-      { signal },
-      true,
-    )
-  ).data.session
+export function getChatSession(sessionId: string, signal?: AbortSignal) {
+  return request<{ session: ChatSession }>(
+    `/chat-api/chat/sessions/${encodeURIComponent(sessionId)}`,
+    { signal },
+    true,
+  )
 }
 
-export async function deleteChat(sessionId: string) {
-  return request<void>(
+export function deleteChat(sessionId: string) {
+  return requestBody<void>(
     `/chat-api/chat/${encodeURIComponent(sessionId)}`,
     { method: 'DELETE' },
     true,

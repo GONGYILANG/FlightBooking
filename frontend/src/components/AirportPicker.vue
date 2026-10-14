@@ -30,8 +30,8 @@ function search(value: string) {
   if (!term) return
   searchTimer = setTimeout(async () => {
     try {
-      const matches = await searchAirports(term, 20, request.signal)
-      if (!request.signal.aborted) results.value = matches
+      const { airports } = await searchAirports(term, 20, request.signal)
+      if (!request.signal.aborted) results.value = airports
     } catch {
       if (!request.signal.aborted)
         error.value = 'Airports could not be loaded. Try searching again.'
