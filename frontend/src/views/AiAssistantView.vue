@@ -99,8 +99,8 @@ watch(
       class="grid h-[calc(100dvh-6.25rem)] min-h-0 grid-cols-1 sm:h-[calc(100dvh-4rem)]"
       :class="{ 'md:grid-cols-[280px_minmax(0,1fr)]': !sidebarCollapsed }"
     >
-      <aside id="conversation-sidebar" 
-        class="hidden overflow-y-auto border-r border-slate-200 bg-surface p-5" 
+      <aside id="conversation-sidebar"
+        class="hidden overflow-y-auto border-r border-slate-200 bg-surface p-5"
         :class="{ 'md:block': !sidebarCollapsed }">
         <ConversationList />
       </aside>
@@ -138,11 +138,7 @@ watch(
               <h1 class="text-xl font-semibold tracking-tight sm:text-2xl">AI Assistant</h1>
             </div>
             <p class="mt-2 truncate text-xs text-slate-500">
-              {{
-                chat.sending
-                  ? 'Waiting for assistant…'
-                  : (chat.current?.title ?? 'Your conversations')
-              }}
+              {{ chat.sending ? 'Waiting for assistant…' : (chat.current?.title ?? 'Your conversations') }}
             </p>
           </div>
           <div class="flex shrink-0 gap-1">

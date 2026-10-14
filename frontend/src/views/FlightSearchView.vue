@@ -175,11 +175,8 @@ function openResults(value?: RecentSearch) {
           <ElFormItem label="From" class="mb-0! min-w-0">
             <AirportPicker v-model="origin" label="From" />
           </ElFormItem>
-          <ElButton
-            :icon="ArrowLeftRight"
-            aria-label="Swap origin and destination"
-            class="w-full rounded-lg! xl:w-10"
-            @click="swap"
+          <ElButton :icon="ArrowLeftRight" aria-label="Swap origin and destination"
+           class="w-full rounded-lg! xl:w-10" @click="swap"
           />
           <ElFormItem label="To" class="mb-0! min-w-0">
             <AirportPicker v-model="destination" label="To" />

@@ -73,11 +73,9 @@ onBeforeUnmount(() => {
     <template #label>{{ modelValue?.cityName }} ({{ modelValue?.iataCode }})</template>
     <template #empty>
       <p class="px-4 py-3 text-sm text-slate-500" role="status">
-        {{
-          loading
-            ? 'Loading airports…'
-            : error || (query ? 'No matching airports' : 'Search by city, airport, or IATA code')
-        }}
+        {{ loading
+          ? 'Loading airports…'
+          : error || (query ? 'No matching airports' : 'Search by city, airport, or IATA code') }}
       </p>
     </template>
     <template #header>

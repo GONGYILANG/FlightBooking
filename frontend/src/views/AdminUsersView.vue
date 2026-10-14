@@ -217,27 +217,19 @@ function go(page: number) {
                       : 'danger'
                 "
               >
-                {{
-                  row.status === 'ACTIVE'
-                    ? 'Active'
-                    : row.status === 'LOCKED'
-                      ? 'Locked'
-                      : 'Disabled'
-                }}
+                {{ row.status === 'ACTIVE' ? 'Active' : row.status === 'LOCKED' ? 'Locked' : 'Disabled' }}
               </ElTag>
             </template>
           </ElTableColumn>
           <ElTableColumn label="Joined" min-width="170">
             <template #default="{ row }">
-              {{
-                row.createdAt
-                  ? new Date(row.createdAt).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })
-                  : '—'
-              }}
+              {{ row.createdAt
+                ? new Date(row.createdAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                  })
+                : '—' }}
             </template>
           </ElTableColumn>
           <ElTableColumn label="Action" width="145">
@@ -258,11 +250,9 @@ function go(page: number) {
                 {{ hasFilters ? 'No users match your search' : 'No users yet' }}
               </p>
               <p class="text-sm text-slate-500">
-                {{
-                  hasFilters
-                    ? 'Try a different name, email, status or role.'
-                    : 'Registered users will appear here.'
-                }}
+                {{ hasFilters
+                  ? 'Try a different name, email, status or role.'
+                  : 'Registered users will appear here.' }}
               </p>
               <ElButton v-if="hasFilters" @click="resetFilters">Clear filters</ElButton>
             </div>

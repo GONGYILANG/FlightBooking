@@ -73,9 +73,9 @@ const bookings = (event: ChatEvent) => event.result.data?.bookings as Booking[]
          shadow-sm shadow-slate-900/5 p-5 text-sm"
       >
         <strong>{{ flight(event)?.flightNumber }} · {{ flight(event)?.airline.name }}</strong>
-        <span class="text-slate-500">{{
-          formatFlightDate(flight(event)!.departureAt, flight(event)!.originAirport.timezone)
-        }}</span>
+        <span class="text-slate-500">
+          {{ formatFlightDate(flight(event)!.departureAt, flight(event)!.originAirport.timezone) }}
+        </span>
         <span class="flex flex-wrap items-center gap-2">
           {{ formatTime(flight(event)!.departureAt, flight(event)!.originAirport.timezone) }}
           {{ flight(event)?.originAirport.iataCode }}<ArrowRight :size="16" aria-hidden="true" />
@@ -84,11 +84,11 @@ const bookings = (event: ChatEvent) => event.result.data?.bookings as Booking[]
         </span>
         <span>
           {{ passengers }} travelers · Total
-          <strong class="text-blue-700">{{
-            formatMoney(
+          <strong class="text-blue-700">
+            {{ formatMoney(
               centsToAmount(amountToCents(flight(event)!.price.amount) * passengers),
               flight(event)!.price.currency,
-            )}}
+            ) }}
           </strong>
         </span>
         <div v-if="!hasBooking && interactive" class="flex flex-wrap gap-3">
@@ -112,13 +112,13 @@ const bookings = (event: ChatEvent) => event.result.data?.bookings as Booking[]
         class="grid max-w-100 justify-items-start gap-3 rounded-xl border border-slate-200
          bg-surface shadow-sm shadow-slate-900/5 p-5 text-sm"
       >
-        <ElTag :type="booking(event)?.status === 'CANCELLED' ? 'danger' : 'success'">{{
-          booking(event)?.status === 'CANCELLED' ? 'Booking cancelled' : 'Booking confirmed'
-        }}</ElTag>
+        <ElTag :type="booking(event)?.status === 'CANCELLED' ? 'danger' : 'success'">
+          {{ booking(event)?.status === 'CANCELLED' ? 'Booking cancelled' : 'Booking confirmed' }}
+        </ElTag>
         <strong>{{ booking(event)?.bookingReference }}</strong>
-        <span>{{
-          formatMoney(booking(event)!.pricing.totalAmount, booking(event)!.pricing.currency)
-        }}</span>
+        <span>
+          {{ formatMoney(booking(event)!.pricing.totalAmount, booking(event)!.pricing.currency) }}
+        </span>
         <RouterLink
           class="inline-flex items-center gap-1 font-medium text-blue-700 hover:underline"
           :to="`/trips/${booking(event)?.id}`"

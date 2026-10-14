@@ -102,9 +102,7 @@ async function confirmCancel() {
         <div>
           <strong>{{ booking.flight.flightNumber }} · {{ booking.flight.airline.name }}</strong>
           <p class="mt-2 text-sm text-slate-500">
-            {{
-              formatFlightDate(booking.flight.departureAt, booking.flight.originAirport.timezone)
-            }}
+            {{ formatFlightDate(booking.flight.departureAt, booking.flight.originAirport.timezone) }}
           </p>
         </div>
         <div class="space-y-2">

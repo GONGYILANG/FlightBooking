@@ -88,13 +88,8 @@ function formatDate(value: string | null) {
                   : 'danger'
             "
           >
-            {{
-              details.user.status === 'ACTIVE'
-                ? 'Active'
-                : details.user.status === 'LOCKED'
-                  ? 'Locked'
-                  : 'Disabled'
-            }}
+            {{ details.user.status === 'ACTIVE' ? 'Active'
+              : details.user.status === 'LOCKED' ? 'Locked' : 'Disabled' }}
           </ElTag>
           <ElTag :type="details.user.role === 'ADMIN' ? 'primary' : 'info'" effect="plain">
             {{ details.user.role === 'ADMIN' ? 'Admin' : 'User' }}
@@ -109,31 +104,26 @@ function formatDate(value: string | null) {
       >
         <h2 id="account-heading" class="mb-5 text-lg font-semibold">Personal information</h2>
         <ElDescriptions :column="1" border label-width="140">
-          <ElDescriptionsItem label="User ID"
-            ><span class="break-all">{{ details.user.id }}</span></ElDescriptionsItem
-          >
-          <ElDescriptionsItem label="Display name"
-            ><span class="break-all">{{ details.user.displayName }}</span></ElDescriptionsItem
-          >
-          <ElDescriptionsItem label="Email"
-            ><span class="break-all">{{ details.user.email }}</span></ElDescriptionsItem
-          >
-          <ElDescriptionsItem label="Role">{{
-            details.user.role === 'ADMIN' ? 'Admin' : 'User'
-          }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="Account status">{{
-            details.user.status === 'ACTIVE'
-              ? 'Active'
-              : details.user.status === 'LOCKED'
-                ? 'Locked'
-                : 'Disabled'
-          }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="Joined">{{
-            formatDate(details.user.createdAt)
-          }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="Last updated">{{
-            formatDate(details.user.updatedAt)
-          }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="User ID">
+            <span class="break-all">{{ details.user.id }}</span>
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="Display name">
+            <span class="break-all">{{ details.user.displayName }}</span>
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="Email">
+            <span class="break-all">{{ details.user.email }}</span>
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="Role">
+            {{ details.user.role === 'ADMIN' ? 'Admin' : 'User' }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="Account status">
+            {{ details.user.status === 'ACTIVE' ? 'Active'
+              : details.user.status === 'LOCKED' ? 'Locked' : 'Disabled' }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="Joined">{{ formatDate(details.user.createdAt) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="Last updated">
+            {{ formatDate(details.user.updatedAt) }}
+          </ElDescriptionsItem>
         </ElDescriptions>
       </section>
 
@@ -142,25 +132,19 @@ function formatDate(value: string | null) {
           <Tickets :size="20" aria-hidden="true" />Booking summary
         </h2>
         <dl class="grid gap-4 sm:grid-cols-3">
-          <div
-            class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5"
-          >
+          <div class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
             <dt class="text-sm text-slate-500">Total bookings</dt>
             <dd class="mt-3 text-3xl font-semibold text-slate-900">
               {{ details.bookingSummary.total }}
             </dd>
           </div>
-          <div
-            class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5"
-          >
+          <div class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
             <dt class="text-sm text-slate-500">Confirmed</dt>
             <dd class="mt-3 text-3xl font-semibold text-blue-700">
               {{ details.bookingSummary.confirmed }}
             </dd>
           </div>
-          <div
-            class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5"
-          >
+          <div class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
             <dt class="text-sm text-slate-500">Cancelled</dt>
             <dd class="mt-3 text-3xl font-semibold text-slate-700">
               {{ details.bookingSummary.cancelled }}
@@ -182,23 +166,23 @@ function formatDate(value: string | null) {
         <template v-if="details.statusChange">
           <p class="mb-5 text-sm text-slate-500">Most recent account status change</p>
           <ElDescriptions :column="1" border label-width="140">
-            <ElDescriptionsItem label="Changed at">{{
-              formatDate(details.statusChange.updatedAt)
-            }}</ElDescriptionsItem>
+            <ElDescriptionsItem label="Changed at">
+              {{ formatDate(details.statusChange.updatedAt) }}
+            </ElDescriptionsItem>
             <ElDescriptionsItem label="Changed by">
               <template v-if="details.statusChange.updatedBy">
                 <span class="break-all">{{ details.statusChange.updatedBy.displayName }}</span>
-                <span class="mt-1 block break-all text-sm text-slate-500">{{
-                  details.statusChange.updatedBy.email
-                }}</span>
+                <span class="mt-1 block break-all text-sm text-slate-500">
+                  {{ details.statusChange.updatedBy.email }}
+                </span>
               </template>
               <span v-else>Administrator information unavailable</span>
             </ElDescriptionsItem>
-            <ElDescriptionsItem label="Reason"
-              ><span class="whitespace-pre-wrap break-words">{{
-                details.statusChange.reason || 'No reason recorded'
-              }}</span></ElDescriptionsItem
-            >
+            <ElDescriptionsItem label="Reason">
+              <span class="whitespace-pre-wrap break-words">
+                {{ details.statusChange.reason || 'No reason recorded' }}
+              </span>
+            </ElDescriptionsItem>
           </ElDescriptions>
         </template>
         <p v-else class="mt-4 text-sm text-slate-500">No status changes recorded.</p>

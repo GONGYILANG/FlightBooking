@@ -221,11 +221,9 @@ onBeforeUnmount(() => {
         {{ stage === 'payment' ? 'Simulated payment' : 'Choose your seats' }}
       </h1>
       <p class="mt-2 text-sm text-slate-500">
-        {{
-          stage === 'payment'
-            ? 'Review your trip and finish this demo booking.'
-            : `Select ${passengers} seat${passengers === 1 ? '' : 's'} for your trip.`
-        }}
+        {{ stage === 'payment'
+          ? 'Review your trip and finish this demo booking.'
+          : `Select ${passengers} seat${passengers === 1 ? '' : 's'} for your trip.` }}
       </p>
       <ElSteps
         :active="stage === 'seats' ? 0 : stage === 'holding' ? 1 : 2"
