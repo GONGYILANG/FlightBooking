@@ -41,7 +41,6 @@ Content-Type: application/json
 | Administration | `GET` | `/api/admin/users/:userId` | Admin |
 | Administration | `PATCH` | `/api/admin/users/:userId/status` | Admin |
 | Administration | `GET` | `/api/admin/bookings` | Admin |
-| Administration | `GET` | `/api/admin/bookings/:bookingId` | Admin |
 | Administration | `PATCH` | `/api/admin/bookings/:bookingId/cancel` | Admin |
 | Administration | `GET` | `/api/admin/flights` | Admin |
 | Administration | `GET` | `/api/admin/flights/:flightId` | Admin |
@@ -858,9 +857,13 @@ limit
 
 Results are ordered by `createdAt DESC, _id DESC`. Each administrator Booking object adds a safe user summary to the normal Booking object. It omits `idempotencyKey`, `priceSnapshot`, and password data.
 
-### `GET /api/admin/bookings/:bookingId`
+To find one booking, use its globally unique `bookingReference`:
 
-Returns one administrator Booking object. An unknown booking returns `404 BOOKING_NOT_FOUND`.
+```http
+GET /api/admin/bookings?bookingReference=BK1A2B3C4D5E6&page=1
+```
+
+With no other filters and `page=1`, a matching reference returns one complete administrator Booking object in `data.bookings`; an unknown reference returns an empty array with `200 OK`.
 
 ### `PATCH /api/admin/bookings/:bookingId/cancel`
 

@@ -329,10 +329,6 @@ export async function listAdminBookings(criteria) {
   };
 }
 
-export async function getAdminBooking(bookingId) {
-  return loadAdminBooking(bookingId);
-}
-
 export async function listAdminFlights(criteria) {
   const requestedAirportCodes = [criteria.origin, criteria.destination].filter(
     Boolean,

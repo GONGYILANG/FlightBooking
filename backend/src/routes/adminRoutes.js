@@ -2,7 +2,6 @@ import { Router } from "express";
 import { serviceError } from "../errors.js";
 import {
   cancelAdminBooking,
-  getAdminBooking,
   getAdminFlight,
   getAdminUser,
   listAdminBookings,
@@ -62,11 +61,6 @@ router.patch(
 
 router.get("/bookings", validateAdminBookingList, async (request, response) => {
   response.json({ data: await listAdminBookings(request.validatedQuery) });
-});
-router.get("/bookings/:bookingId", validateAdminBookingId, async (request, response) => {
-  response.json({
-    data: { booking: await getAdminBooking(request.params.bookingId) },
-  });
 });
 router.patch(
   "/bookings/:bookingId/cancel",

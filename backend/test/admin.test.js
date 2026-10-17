@@ -43,7 +43,7 @@ async function tokenFor(subject) {
     algorithm: "HS256",
     subject: subject.toString(),
     issuer: "flight-booking-api",
-    audience: "flight-booking-android",
+    audience: "flight-booking-api",
     expiresIn: "24h",
     jwtid: randomUUID(),
   });
@@ -309,13 +309,15 @@ test("global booking management filters records without exposing internal fields
     ),
   );
 
-  const detail = await request(app)
-    .get(`/api/admin/bookings/${second._id}`)
+  const referenceList = await request(app)
+    .get("/api/admin/bookings")
+    .query({ bookingReference: second.bookingReference })
     .set(authorization(adminToken))
     .expect(200);
-  assert.equal(detail.body.data.booking.user.email, otherUser.email);
-  assert.equal(detail.body.data.booking.cancellation.source, "USER");
-  const serialized = JSON.stringify(detail.body);
+  const [booking] = referenceList.body.data.bookings;
+  assert.equal(booking.user.email, otherUser.email);
+  assert.equal(booking.cancellation.source, "USER");
+  const serialized = JSON.stringify(referenceList.body);
   assert.equal(serialized.includes("idempotencyKey"), false);
   assert.equal(serialized.includes("priceSnapshot"), false);
   assert.equal(serialized.includes("passwordHash"), false);
