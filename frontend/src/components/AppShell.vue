@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
-import { CircleUserRound, MessageCircle, Moon, Plane, Sun, Tickets, Users } from 'lucide-vue-next'
+import { CircleUserRound, ClipboardList, MessageCircle, Moon, Plane, Sun, Tickets, Users } from 'lucide-vue-next'
 import { computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useThemeStore } from '../stores/theme'
@@ -14,7 +14,12 @@ const links = computed(() => [
   { to: '/ai', label: 'AI Assistant', icon: MessageCircle },
   { to: '/trips', label: 'My trips', icon: Tickets },
   { to: '/profile', label: 'Profile', icon: CircleUserRound },
-  ...(auth.user?.role === 'ADMIN' ? [{ to: '/admin/users', label: 'Users', icon: Users }] : []),
+  ...(auth.user?.role === 'ADMIN'
+    ? [
+        { to: '/admin/users', label: 'Users', icon: Users },
+        { to: '/admin/bookings', label: 'Bookings', icon: ClipboardList },
+      ]
+    : []),
 ])
 </script>
 

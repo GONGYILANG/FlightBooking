@@ -45,6 +45,11 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/admin/bookings',
+      component: () => import('../views/AdminBookingsView.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/admin/users',
       component: () => import('../views/AdminUsersView.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },

@@ -52,9 +52,6 @@ function escapeRegularExpression(value) {
 }
 
 function toAdminUserSummary(user) {
-  if (!user) {
-    return null;
-  }
   return {
     id: user._id.toString(),
     email: user.email,

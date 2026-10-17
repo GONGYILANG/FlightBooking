@@ -10,7 +10,7 @@ import {
   ElSkeleton,
   ElTag,
 } from 'element-plus'
-import { ArrowLeft, History, LoaderCircle, Pencil, Tickets, X } from 'lucide-vue-next'
+import { ArrowLeft, ArrowRight, History, LoaderCircle, Pencil, Tickets, X } from 'lucide-vue-next'
 import { onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
@@ -186,9 +186,17 @@ function formatDate(value) {
       </section>
 
       <section aria-labelledby="bookings-heading">
-        <h2 id="bookings-heading" class="mb-4 flex items-center gap-2 text-lg font-semibold">
-          <Tickets :size="20" aria-hidden="true" />Booking summary
-        </h2>
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 id="bookings-heading" class="flex items-center gap-2 text-lg font-semibold">
+            <Tickets :size="20" aria-hidden="true" />Booking summary
+          </h2>
+          <RouterLink
+            class="inline-flex items-center gap-2 font-medium text-blue-700 hover:underline"
+            :to="{ path: '/admin/bookings', query: { userId: route.params.userId } }"
+          >
+            View bookings<ArrowRight :size="16" aria-hidden="true" />
+          </RouterLink>
+        </div>
         <dl class="grid gap-4 sm:grid-cols-3">
           <div class="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
             <dt class="text-sm text-slate-500">Total bookings</dt>

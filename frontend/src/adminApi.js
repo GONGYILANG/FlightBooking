@@ -17,3 +17,8 @@ export function updateAdminUserStatus(userId, value) {
     true,
   )
 }
+
+export function listAdminBookings(query, signal) {
+  const params = stringifyQuery(query)
+  return request(`/api/admin/bookings${params ? `?${params}` : ''}`, { signal }, true)
+}

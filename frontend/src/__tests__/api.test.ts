@@ -7,7 +7,7 @@ import {
   logout, register, request, requestBody, searchAirports, searchFlights, sendChat,
   setAccessToken, setUnauthorizedHandler,
 } from '../api.ts'
-import { getAdminUser, listAdminUsers, updateAdminUserStatus } from '../adminApi.js'
+import { getAdminUser, listAdminBookings, listAdminUsers, updateAdminUserStatus } from '../adminApi.js'
 
 function mockJson(body: unknown, status = 200) {
   let captured: { path: string; init: RequestInit } | null = null
@@ -232,6 +232,37 @@ test('admin user details unwrap booking counts and the latest status change', as
   assert.equal(captured()!.path, '/api/admin/users/user%2Fid')
   assert.equal(captured()!.init.signal, controller.signal)
   assert.equal(new Headers(captured()!.init.headers).get('Authorization'), 'Bearer admin-token')
+})
+
+test('admin bookings default to all users and keep the backend pagination', async () => {
+  const data = {
+    bookings: [{ id: 'booking', user: { id: 'user', displayName: 'Maya' }, source: 'AI' }],
+    pagination: { page: 1, limit: 20, totalItems: 1, totalPages: 1 },
+  }
+  const captured = mockJson({ data })
+  setAccessToken('admin-token')
+  assert.deepEqual(await listAdminBookings({}), data)
+  const request = captured()!
+  assert.equal(request.path, '/api/admin/bookings')
+  assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer admin-token')
+})
+
+test('admin booking filters preserve user scope, ISO offsets, pagination and abort signal', async () => {
+  const captured = mockJson({ data: { bookings: [], pagination: {} } })
+  const query = {
+    userId: 'user-id', status: 'CONFIRMED', source: 'UI',
+    createdFrom: '2026-10-01T00:00:00+08:00', createdTo: '2026-10-18T23:59:59+08:00',
+    page: 2, limit: 5,
+  }
+  const controller = new AbortController()
+  await listAdminBookings(query, controller.signal)
+  const request = captured()!
+  const url = new URL(request.path, 'http://localhost')
+  assert.equal(url.pathname, '/api/admin/bookings')
+  assert.deepEqual(Object.fromEntries(url.searchParams), {
+    ...query, page: '2', limit: '5',
+  })
+  assert.equal(request.init.signal, controller.signal)
 })
 
 test('admin status updates send the reason and preserve change metadata', async () => {
