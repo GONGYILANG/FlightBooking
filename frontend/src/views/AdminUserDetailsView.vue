@@ -2,8 +2,6 @@
 import {
   ElAlert,
   ElButton,
-  ElDescriptions,
-  ElDescriptionsItem,
   ElSkeleton,
   ElTag,
 } from 'element-plus'
@@ -64,7 +62,7 @@ function formatDate(value) {
     </div>
     <section v-else-if="details" class="space-y-6" aria-labelledby="user-heading">
       <div>
-        <p class="mb-2 text-xs font-semibold tracking-widest text-blue-700 uppercase">
+        <p class="mb-2 text-sm font-semibold tracking-widest text-blue-700 uppercase">
           Administration · User details
         </p>
         <div class="flex flex-wrap items-center gap-3">
@@ -91,32 +89,47 @@ function formatDate(value) {
       </div>
 
       <section
-        class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5 sm:p-6"
+        class="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5 sm:p-6"
         aria-labelledby="account-heading"
       >
         <h2 id="account-heading" class="mb-5 text-lg font-semibold">Personal information</h2>
-        <ElDescriptions :column="1" border label-width="140">
-          <ElDescriptionsItem label="User ID">
-            <span class="break-all">{{ details.user.id }}</span>
-          </ElDescriptionsItem>
-          <ElDescriptionsItem label="Display name">
-            <span class="break-all">{{ details.user.displayName }}</span>
-          </ElDescriptionsItem>
-          <ElDescriptionsItem label="Email">
-            <span class="break-all">{{ details.user.email }}</span>
-          </ElDescriptionsItem>
-          <ElDescriptionsItem label="Role">
-            {{ details.user.role === 'ADMIN' ? 'Admin' : 'User' }}
-          </ElDescriptionsItem>
-          <ElDescriptionsItem label="Account status">
-            {{ details.user.status === 'ACTIVE' ? 'Active'
-              : details.user.status === 'LOCKED' ? 'Locked' : 'Disabled' }}
-          </ElDescriptionsItem>
-          <ElDescriptionsItem label="Joined">{{ formatDate(details.user.createdAt) }}</ElDescriptionsItem>
-          <ElDescriptionsItem label="Last updated">
-            {{ formatDate(details.user.updatedAt) }}
-          </ElDescriptionsItem>
-        </ElDescriptions>
+        <div class="overflow-x-auto rounded-2xl border border-slate-300">
+          <table class="details-table" aria-labelledby="account-heading">
+            <tbody>
+              <tr>
+                <th scope="row">User ID</th>
+                <td class="break-all">{{ details.user.id }}</td>
+              </tr>
+              <tr>
+                <th scope="row">Display name</th>
+                <td class="wrap-anywhere">{{ details.user.displayName }}</td>
+              </tr>
+              <tr>
+                <th scope="row">Email</th>
+                <td class="wrap-anywhere">{{ details.user.email }}</td>
+              </tr>
+              <tr>
+                <th scope="row">Role</th>
+                <td>{{ details.user.role === 'ADMIN' ? 'Admin' : 'User' }}</td>
+              </tr>
+              <tr>
+                <th scope="row">Account status</th>
+                <td>
+                  {{ details.user.status === 'ACTIVE' ? 'Active'
+                    : details.user.status === 'LOCKED' ? 'Locked' : 'Disabled' }}
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Joined</th>
+                <td>{{ formatDate(details.user.createdAt) }}</td>
+              </tr>
+              <tr>
+                <th scope="row">Last updated</th>
+                <td>{{ formatDate(details.user.updatedAt) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section aria-labelledby="bookings-heading">
@@ -124,19 +137,19 @@ function formatDate(value) {
           <Tickets :size="20" aria-hidden="true" />Booking summary
         </h2>
         <dl class="grid gap-4 sm:grid-cols-3">
-          <div class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
+          <div class="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
             <dt class="text-sm text-slate-500">Total bookings</dt>
             <dd class="mt-3 text-3xl font-semibold text-slate-900">
               {{ details.bookingSummary.total }}
             </dd>
           </div>
-          <div class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
+          <div class="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
             <dt class="text-sm text-slate-500">Confirmed</dt>
             <dd class="mt-3 text-3xl font-semibold text-blue-700">
               {{ details.bookingSummary.confirmed }}
             </dd>
           </div>
-          <div class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
+          <div class="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5">
             <dt class="text-sm text-slate-500">Cancelled</dt>
             <dd class="mt-3 text-3xl font-semibold text-slate-700">
               {{ details.bookingSummary.cancelled }}
@@ -149,7 +162,7 @@ function formatDate(value) {
       </section>
 
       <section
-        class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5 sm:p-6"
+        class="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm shadow-slate-900/5 sm:p-6"
         aria-labelledby="status-heading"
       >
         <h2 id="status-heading" class="mb-2 flex items-center gap-2 text-lg font-semibold">
@@ -157,25 +170,32 @@ function formatDate(value) {
         </h2>
         <template v-if="details.statusChange">
           <p class="mb-5 text-sm text-slate-500">Most recent account status change</p>
-          <ElDescriptions :column="1" border label-width="140">
-            <ElDescriptionsItem label="Changed at">
-              {{ formatDate(details.statusChange.updatedAt) }}
-            </ElDescriptionsItem>
-            <ElDescriptionsItem label="Changed by">
-              <template v-if="details.statusChange.updatedBy">
-                <span class="break-all">{{ details.statusChange.updatedBy.displayName }}</span>
-                <span class="mt-1 block break-all text-sm text-slate-500">
-                  {{ details.statusChange.updatedBy.email }}
-                </span>
-              </template>
-              <span v-else>Administrator information unavailable</span>
-            </ElDescriptionsItem>
-            <ElDescriptionsItem label="Reason">
-              <span class="whitespace-pre-wrap break-words">
-                {{ details.statusChange.reason }}
-              </span>
-            </ElDescriptionsItem>
-          </ElDescriptions>
+          <div class="overflow-x-auto rounded-2xl border border-slate-300">
+            <table class="details-table" aria-labelledby="status-heading">
+              <tbody>
+                <tr>
+                  <th scope="row">Changed at</th>
+                  <td>{{ formatDate(details.statusChange.updatedAt) }}</td>
+                </tr>
+                <tr>
+                  <th scope="row">Changed by</th>
+                  <td class="wrap-anywhere">
+                    <template v-if="details.statusChange.updatedBy">
+                      <span>{{ details.statusChange.updatedBy.displayName }}</span>
+                      <span class="mt-1 block text-sm text-slate-500">
+                        {{ details.statusChange.updatedBy.email }}
+                      </span>
+                    </template>
+                    <span v-else>Administrator information unavailable</span>
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">Reason</th>
+                  <td class="whitespace-pre-wrap break-words">{{ details.statusChange.reason }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </template>
         <p v-else class="mt-4 text-sm text-slate-500">No status changes recorded.</p>
       </section>

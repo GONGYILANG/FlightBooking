@@ -82,7 +82,7 @@ function go(page) {
 <template>
   <AppShell>
     <section aria-labelledby="users-heading">
-      <p class="mb-2 text-xs font-semibold tracking-widest text-blue-700 uppercase">
+      <p class="mb-2 text-sm font-semibold tracking-widest text-blue-700 uppercase">
         Administration
       </p>
       <h1 id="users-heading" class="text-2xl font-semibold tracking-tight">Users</h1>
@@ -91,7 +91,7 @@ function go(page) {
       </p>
 
       <ElForm
-        class="mt-6 grid gap-x-4 rounded-xl border border-slate-200 bg-surface p-5 shadow-sm
+        class="mt-6 grid gap-x-4 rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm
          shadow-slate-900/5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px_160px_auto]"
         label-position="top"
         aria-label="Search and filter users"
@@ -164,7 +164,7 @@ function go(page) {
           row-key="id"
           size="default"
           scrollbar-always-on
-          class="w-full overflow-hidden rounded-xl border border-slate-200 shadow-sm
+          class="w-full overflow-hidden rounded-2xl border border-slate-200 shadow-sm
            shadow-slate-900/5 [&_th]:bg-slate-50! [&_th]:py-3! [&_th]:font-medium!
            [&_th]:text-slate-500! [&_td]:py-4! [&_.el-table__row]:cursor-pointer"
           aria-label="Users"
