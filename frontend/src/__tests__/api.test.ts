@@ -7,7 +7,7 @@ import {
   logout, register, request, requestBody, searchAirports, searchFlights, sendChat,
   setAccessToken, setUnauthorizedHandler,
 } from '../api.ts'
-import { getAdminUser, listAdminUsers } from '../adminApi.js'
+import { getAdminUser, listAdminUsers, updateAdminUserStatus } from '../adminApi.js'
 
 function mockJson(body: unknown, status = 200) {
   let captured: { path: string; init: RequestInit } | null = null
@@ -232,6 +232,21 @@ test('admin user details unwrap booking counts and the latest status change', as
   assert.equal(captured()!.path, '/api/admin/users/user%2Fid')
   assert.equal(captured()!.init.signal, controller.signal)
   assert.equal(new Headers(captured()!.init.headers).get('Authorization'), 'Bearer admin-token')
+})
+
+test('admin status updates send the reason and preserve change metadata', async () => {
+  setAccessToken('admin-token')
+  const value = { status: 'LOCKED', reason: ' Account review ' }
+  for (const changed of [true, false]) {
+    const body = { data: { user: { id: 'user', status: 'LOCKED' } }, meta: { changed } }
+    const captured = mockJson(body)
+    assert.deepEqual(await updateAdminUserStatus('user/id', value), body)
+    const request = captured()!
+    assert.equal(request.path, '/api/admin/users/user%2Fid/status')
+    assert.equal(request.init.method, 'PATCH')
+    assert.deepEqual(JSON.parse(String(request.init.body)), value)
+    assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer admin-token')
+  }
 })
 
 test('admin user errors preserve USER_NOT_FOUND and ADMIN_REQUIRED without logging out a normal user', async () => {
