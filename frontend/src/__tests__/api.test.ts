@@ -7,7 +7,9 @@ import {
   logout, register, request, requestBody, searchAirports, searchFlights, sendChat,
   setAccessToken, setUnauthorizedHandler,
 } from '../api.ts'
-import { getAdminUser, listAdminBookings, listAdminUsers, updateAdminUserStatus } from '../adminApi.js'
+import {
+  cancelAdminBooking, getAdminUser, listAdminBookings, listAdminUsers, updateAdminUserStatus,
+} from '../adminApi.js'
 
 function mockJson(body: unknown, status = 200) {
   let captured: { path: string; init: RequestInit } | null = null
@@ -263,6 +265,20 @@ test('admin booking filters preserve user scope, ISO offsets, pagination and abo
     ...query, page: '2', limit: '5',
   })
   assert.equal(request.init.signal, controller.signal)
+})
+
+test('admin booking cancellation sends the reason and preserves replay metadata', async () => {
+  setAccessToken('admin-token')
+  for (const alreadyCancelled of [false, true]) {
+    const body = { data: { booking: { id: 'booking', status: 'CANCELLED' } }, meta: { alreadyCancelled } }
+    const captured = mockJson(body)
+    assert.deepEqual(await cancelAdminBooking('booking/id', ' Customer request '), body)
+    const request = captured()!
+    assert.equal(request.path, '/api/admin/bookings/booking%2Fid/cancel')
+    assert.equal(request.init.method, 'PATCH')
+    assert.deepEqual(JSON.parse(String(request.init.body)), { reason: ' Customer request ' })
+    assert.equal(new Headers(request.init.headers).get('Authorization'), 'Bearer admin-token')
+  }
 })
 
 test('admin status updates send the reason and preserve change metadata', async () => {

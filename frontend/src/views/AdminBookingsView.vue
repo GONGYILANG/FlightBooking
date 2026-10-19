@@ -3,8 +3,10 @@ import {
   ElAlert,
   ElButton,
   ElDatePicker,
+  ElDialog,
   ElForm,
   ElFormItem,
+  ElInput,
   ElOption,
   ElPagination,
   ElSelect,
@@ -12,12 +14,13 @@ import {
   ElTable,
   ElTableColumn,
   ElTag,
+  ElTooltip,
 } from 'element-plus'
-import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Search } from 'lucide-vue-next'
+import { ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, LoaderCircle, Search, X } from 'lucide-vue-next'
 import { onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
-import { listAdminBookings } from '../adminApi.js'
+import { cancelAdminBooking, listAdminBookings } from '../adminApi.js'
 import { formatFlightDate, formatMoney, formatTime } from '../lib'
 
 const route = useRoute()
@@ -26,6 +29,12 @@ const data = ref(null)
 const search = reactive({ status: '', source: '', createdFrom: '', createdTo: '' })
 const loading = ref(true)
 const error = ref('')
+const selectedBooking = ref(null)
+const dialogOpen = ref(false)
+const cancelling = ref(false)
+const cancelReason = ref('')
+const cancelError = ref('')
+const notice = ref('')
 let controller
 
 async function loadBookings() {
@@ -49,6 +58,7 @@ async function loadBookings() {
 watch(
   () => route.query,
   () => {
+    dialogOpen.value = false
     search.status = route.query.status || ''
     search.source = route.query.source || ''
     search.createdFrom = route.query.createdFrom || ''
@@ -78,6 +88,42 @@ function resetSearch() {
 
 function go(page) {
   router.push({ query: { ...route.query, page } })
+}
+
+function canCancel(booking) {
+  return booking.status === 'CONFIRMED'
+    && ['SCHEDULED', 'DELAYED'].includes(booking.flight.status)
+    && new Date(booking.flight.departureAt).getTime() > Date.now()
+}
+
+function openCancel(booking) {
+  selectedBooking.value = booking
+  cancelReason.value = ''
+  cancelError.value = ''
+  notice.value = ''
+  dialogOpen.value = true
+}
+
+async function confirmCancel() {
+  if (cancelling.value) return
+  const booking = selectedBooking.value
+  const path = route.path
+  cancelling.value = true
+  cancelError.value = ''
+  try {
+    const result = await cancelAdminBooking(booking.id, cancelReason.value)
+    if (route.path !== path) return
+    dialogOpen.value = false
+    notice.value = result.meta.alreadyCancelled
+      ? `Booking ${booking.bookingReference} was already cancelled.`
+      : `Booking ${booking.bookingReference} cancelled.`
+    if (route.query.page === '1') await loadBookings()
+    else await router.push({ query: { ...route.query, page: 1 } })
+  } catch (reason) {
+    if (route.path === path) cancelError.value = reason.message
+  } finally {
+    cancelling.value = false
+  }
 }
 </script>
 
@@ -168,6 +214,10 @@ function go(page) {
         </p>
       </ElForm>
 
+      <div v-if="notice" class="mt-6">
+        <ElAlert :title="notice" type="success" :closable="false" role="status" />
+      </div>
+
       <div class="my-6 flex justify-between gap-3 text-sm text-slate-500" aria-live="polite">
         <span>Newest first</span>
         <span v-if="data && !loading && !error">
@@ -247,6 +297,30 @@ function go(page) {
               </ElTag>
             </template>
           </ElTableColumn>
+          <ElTableColumn label="Action" width="165" fixed="right">
+            <template #default="{ row }">
+              <ElTooltip
+                content="Only confirmed bookings for upcoming scheduled or delayed flights can be cancelled."
+                placement="top"
+                popper-class="max-w-72"
+                :disabled="canCancel(row)"
+              >
+                <span>
+                  <ElButton
+                    type="danger"
+                    size="small"
+                    plain
+                    :icon="X"
+                    :disabled="!canCancel(row)"
+                    :aria-label="`Cancel booking ${row.bookingReference}`"
+                    @click="openCancel(row)"
+                  >
+                    Cancel booking
+                  </ElButton>
+                </span>
+              </ElTooltip>
+            </template>
+          </ElTableColumn>
           <template #empty>
             <div class="grid justify-items-center gap-3 py-10">
               <p class="font-medium text-slate-700">No bookings found</p>
@@ -269,5 +343,54 @@ function go(page) {
         />
       </template>
     </section>
+    <ElDialog
+      class="rounded-2xl!"
+      v-model="dialogOpen"
+      title="Cancel booking"
+      width="min(560px, calc(100vw - 32px))"
+      align-center
+      :close-icon="X"
+      :show-close="!cancelling"
+      :close-on-click-modal="!cancelling"
+      :close-on-press-escape="!cancelling"
+      destroy-on-close
+    >
+      <ElForm v-if="selectedBooking" label-position="top" @submit.prevent="confirmCancel">
+        <p class="mb-5 wrap-anywhere text-sm leading-6 text-slate-600">
+          Cancel booking <strong>{{ selectedBooking.bookingReference }}</strong> for
+          <strong>{{ selectedBooking.user.displayName }}</strong>?
+          The {{ selectedBooking.seatCount }} reserved seats will be released.
+        </p>
+        <ElFormItem label="Reason" for="cancel-reason" required>
+          <ElInput
+            v-model="cancelReason"
+            id="cancel-reason"
+            type="textarea"
+            aria-label="Cancellation reason"
+            placeholder="Explain why this booking needs to be cancelled"
+            :rows="4"
+            :maxlength="500"
+            show-word-limit
+            :disabled="cancelling"
+          />
+          <p class="mt-2 text-xs text-slate-500">Required, 3–500 characters.</p>
+        </ElFormItem>
+        <div v-if="cancelError" class="mt-4">
+          <ElAlert :title="cancelError" type="error" :closable="false" role="alert" />
+        </div>
+        <div class="mt-6 flex flex-wrap justify-end gap-3">
+          <ElButton :disabled="cancelling" @click="dialogOpen = false">Keep booking</ElButton>
+          <ElButton
+            type="danger"
+            native-type="submit"
+            :loading="cancelling"
+            :loading-icon="LoaderCircle"
+            :disabled="cancelling"
+          >
+            {{ cancelling ? 'Cancelling…' : 'Cancel booking' }}
+          </ElButton>
+        </div>
+      </ElForm>
+    </ElDialog>
   </AppShell>
 </template>

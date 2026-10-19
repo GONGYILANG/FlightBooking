@@ -22,3 +22,11 @@ export function listAdminBookings(query, signal) {
   const params = stringifyQuery(query)
   return request(`/api/admin/bookings${params ? `?${params}` : ''}`, { signal }, true)
 }
+
+export function cancelAdminBooking(bookingId, reason) {
+  return requestBody(
+    `/api/admin/bookings/${encodeURIComponent(bookingId)}/cancel`,
+    { method: 'PATCH', body: JSON.stringify({ reason }) },
+    true,
+  )
+}
