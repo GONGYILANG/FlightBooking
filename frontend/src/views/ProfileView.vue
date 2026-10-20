@@ -32,7 +32,7 @@ async function signOut() {
       <h1 class="text-2xl font-semibold tracking-tight">Profile</h1>
       <p class="mt-2 text-sm text-slate-500">Your account details</p>
       <div
-        class="mx-auto mt-10 max-w-3xl rounded-2xl border border-slate-200 p-5 sm:p-7
+        class="mx-auto mt-10 max-w-3xl animate-fade-up rounded-2xl border border-slate-200 p-5 sm:p-7
          bg-surface shadow-sm shadow-slate-900/5"
       >
         <h2 id="account-heading" class="mb-6 text-lg font-semibold">Account details</h2>

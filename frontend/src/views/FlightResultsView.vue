@@ -289,7 +289,7 @@ function applyFilters(value: FilterValue) {
         <ElAlert :title="error" type="error" :closable="false" role="alert" />
         <ElButton class="justify-self-center" @click="reload++">Try again </ElButton>
       </div>
-      <FlightTable v-else :flights="flights" :passengers="search.passengers" />
+      <FlightTable v-else class="animate-fade-in" :flights="flights" :passengers="search.passengers" />
       <ElPagination
         v-if="!loading && !error && pagination.totalPages"
         class="mt-6 justify-center"

@@ -80,10 +80,6 @@ const total = computed(() =>
 )
 // toggleDemoSeat enforces availability/uniqueness; route changes reset the selection.
 const validSelection = computed(() => selected.value.length === passengers.value)
-const backToFlight = computed(() => ({
-  path: `/flights/${route.params.flightId}`,
-  query: { passengers: passengers.value },
-}))
 
 function readPending(): PendingBooking | null {
   try {
@@ -208,13 +204,13 @@ onBeforeUnmount(() => {
       <ElAlert :title="error" type="error" :closable="false" role="alert" />
       <ElButton class="justify-self-start" @click="reload++">Try again</ElButton>
     </div>
-    <section v-else-if="flight" class="pb-32 lg:pb-0">
+    <section v-else-if="flight" class="animate-fade-up pb-32 lg:pb-0">
       <ElButton
         link
         type="primary"
         :icon="ArrowLeft"
         :disabled="submitting"
-        @click="router.push(backToFlight)"
+        @click="router.back()"
         >Back to flight
       </ElButton>
       <h1 ref="heading" tabindex="-1" class="mt-4 text-[28px] font-semibold tracking-tight">
@@ -252,7 +248,7 @@ onBeforeUnmount(() => {
       <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
         <section
           v-if="stage !== 'payment'"
-          class="min-w-0 rounded-xl border border-slate-200 bg-surface p-4 shadow-sm sm:p-6"
+          class="min-w-0 rounded-2xl border border-slate-200 bg-surface p-4 shadow-sm sm:p-6"
         >
           <h2 class="text-xl font-semibold">Demo cabin</h2>
           <p class="mt-2 text-xs leading-5 text-slate-500">
@@ -324,12 +320,12 @@ onBeforeUnmount(() => {
             </span>
           </div>
         </section>
-        <section v-else class="rounded-xl border border-slate-200 bg-surface p-6 shadow-sm sm:p-8">
+        <section v-else class="rounded-2xl border border-slate-200 bg-surface p-6 shadow-sm sm:p-8">
           <h2 class="flex items-center gap-3 text-lg font-semibold">
             <CreditCard :size="24" aria-hidden="true" />Demo payment
           </h2>
           <div
-            class="mx-auto my-8 grid aspect-[1.8] w-full max-w-sm content-between rounded-xl
+            class="mx-auto my-8 grid aspect-[1.8] w-full max-w-sm content-between rounded-2xl
              bg-[#10233f] p-6 text-[#fff] shadow-lg shadow-slate-900/10"
             aria-label="Demo card ending in 4242"
           >
@@ -347,7 +343,7 @@ onBeforeUnmount(() => {
             :show-icon="true"
           />
         </section>
-        <aside class="rounded-xl border border-slate-200 bg-surface p-5 shadow-sm sm:p-6">
+        <aside class="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm sm:p-6">
           <h2 class="text-xl font-semibold">Trip summary</h2>
           <p class="mt-5 text-sm font-medium">
             {{ flight.flightNumber }} · {{ flight.airline.name }}
@@ -395,7 +391,7 @@ onBeforeUnmount(() => {
               @click="confirmSeats"
               >Confirm seats
             </ElButton>
-            <ElButton class="m-0!" @click="router.push(backToFlight)">Cancel</ElButton>
+            <ElButton class="m-0!" @click="router.back()">Cancel</ElButton>
           </div>
           <ElForm v-else-if="stage === 'payment'" class="grid gap-3" @submit.prevent="pay">
             <ElButton

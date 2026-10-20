@@ -36,5 +36,3 @@ app.use((request, response) => {
 app.use(errorHandler);
 
 export default app;
-
-process.env.NODE_ENV ??= "development";
