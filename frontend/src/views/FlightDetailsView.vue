@@ -92,7 +92,10 @@ async function confirmBooking() {
       <ElAlert :title="error" type="error" :closable="false" role="alert" />
       <ElButton class="justify-self-start" @click="reload++">Try again </ElButton>
     </div>
-    <section v-else-if="flight" class="grid gap-8 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
+    <section
+      v-else-if="flight"
+      class="grid animate-fade-up gap-8 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]"
+    >
       <div class="min-w-0 space-y-6">
         <ElButton link type="primary" :icon="ArrowLeft" @click="router.back()">
           Back to results

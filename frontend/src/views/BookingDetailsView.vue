@@ -79,7 +79,7 @@ async function confirmCancel() {
       <ElAlert :title="error" type="error" :closable="false" role="alert" />
       <ElButton class="justify-self-start" @click="reload++">Try again</ElButton>
     </div>
-    <section v-else-if="booking" class="space-y-6">
+    <section v-else-if="booking" class="animate-fade-in space-y-6">
       <RouterLink
         class="inline-flex items-center gap-2 text-sm font-medium text-blue-700 hover:underline"
         to="/trips"

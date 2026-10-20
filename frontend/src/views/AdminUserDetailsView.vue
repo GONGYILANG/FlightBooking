@@ -106,7 +106,7 @@ function formatDate(value) {
       <ElAlert :title="error" type="error" :closable="false" role="alert" />
       <ElButton class="justify-self-start" @click="loadUser">Try again</ElButton>
     </div>
-    <section v-else-if="details" class="space-y-6" aria-labelledby="user-heading">
+    <section v-else-if="details" class="animate-fade-in space-y-6" aria-labelledby="user-heading">
       <div>
         <p class="mb-2 text-sm font-semibold tracking-widest text-blue-700 uppercase">
           Administration · User details

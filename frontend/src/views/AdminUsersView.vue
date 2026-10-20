@@ -164,7 +164,7 @@ function go(page) {
           row-key="id"
           size="default"
           scrollbar-always-on
-          class="w-full overflow-hidden rounded-2xl border border-slate-200 shadow-sm
+          class="w-full animate-fade-in overflow-hidden rounded-2xl border border-slate-200 shadow-sm
            shadow-slate-900/5 [&_th]:bg-slate-50! [&_th]:py-3! [&_th]:font-medium!
            [&_th]:text-slate-500! [&_td]:py-4! [&_.el-table__row]:cursor-pointer"
           aria-label="Users"

@@ -167,7 +167,7 @@ function openResults(value?: RecentSearch) {
       <div class="relative z-10 mx-auto -mt-14 max-w-7xl px-4 pb-12 sm:px-8 sm:pb-20">
         <ElForm
           label-position="top"
-          class="grid animate-fade-up [animation-delay:120ms] items-end gap-4 rounded-2xl
+          class="grid animate-fade-up [animation-delay:40ms] items-end gap-4 rounded-2xl
            border border-slate-200 bg-surface p-5 shadow-[0_24px_60px_-24px_rgba(15,23,42,0.35)]
            ring-1 ring-slate-900/5 sm:grid-cols-2 sm:p-7 xl:grid-cols-[1.2fr_auto_1.2fr_1fr_.85fr_auto]"
           @submit.prevent="openResults()"
@@ -217,7 +217,7 @@ function openResults(value?: RecentSearch) {
         />
         <RouterLink
           to="/ai"
-          class="group mt-8 flex animate-fade-up [animation-delay:180ms] items-center
+          class="group mt-8 flex animate-fade-up [animation-delay:80ms] items-center
            justify-between gap-4 rounded-2xl border border-blue-700/15 bg-blue-700/5
            px-6 py-5 transition-all hover:border-blue-700/30 hover:bg-blue-700/10"
         >
@@ -243,7 +243,7 @@ function openResults(value?: RecentSearch) {
             aria-hidden="true"
           />
         </RouterLink>
-        <section v-if="recent" class="mt-8 animate-fade-up [animation-delay:240ms]">
+        <section v-if="recent" class="mt-8 animate-fade-up [animation-delay:120ms]">
           <h2 class="mb-4 flex items-center gap-2 font-display text-lg font-bold">
             <History :size="18" class="text-slate-400" aria-hidden="true" />Recent search
           </h2>

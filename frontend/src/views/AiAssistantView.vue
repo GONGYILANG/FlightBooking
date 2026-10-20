@@ -192,7 +192,7 @@ watch(
             </p>
             <div
               v-else-if="chat.current?.loaded && !chat.current.turns.length"
-              class="py-12 text-center"
+              class="animate-fade-up py-12 text-center"
             >
               <h2 class="text-base font-semibold">Where would you like to go?</h2>
               <p class="mt-2 text-sm text-slate-500">

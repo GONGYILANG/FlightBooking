@@ -89,7 +89,7 @@ async function submit() {
         </div>
       </aside>
       <section
-        class="mx-auto w-full max-w-md self-center px-6 py-9 sm:px-10 sm:py-12
+        class="mx-auto w-full max-w-md animate-fade-in self-center px-6 py-9 sm:px-10 sm:py-12
          md:max-w-none md:px-12 lg:px-16"
       >
         <h1 class="text-[28px] font-semibold tracking-tight text-slate-900">
