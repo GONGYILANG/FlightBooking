@@ -6,6 +6,8 @@ import "dotenv/config";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import request from "supertest";
+import SeatClaim from "../src/models/SeatClaim.js";
+import { inspectFlightInventory, repairFlightInventory } from "../src/services/seatInventoryService.js";
 
 const [
   { default: app },
@@ -56,10 +58,7 @@ function accessTokenFor(subject) {
     { type: "access" },
     process.env.JWT_SECRET,
     {
-      algorithm: "HS256",
       subject: subject.toString(),
-      issuer: "flight-booking-api",
-      audience: "flight-booking-android",
       expiresIn: "24h",
       jwtid: randomUUID(),
     },
@@ -123,6 +122,8 @@ function directBookingData({ user, flight, seatCount = 1, status = "CONFIRMED" }
     user: user._id,
     flight: flight._id,
     seatCount,
+    seatNumbers: Array.from({ length: seatCount }, (_, i) => `${Math.floor(i / 6) + 1}${"ABCDEF"[i % 6]}`),
+    seatSelectionMode: "AUTO",
     source: "UI",
     status,
     idempotencyKey: uuid,
@@ -148,6 +149,7 @@ before(async () => {
     User.init(),
   ]);
 
+  await SeatClaim.init();
   airline = await Airline.create({
     code: randomLetters(3),
     name: `Booking Test Airline ${randomUUID()}`,
@@ -191,6 +193,7 @@ before(async () => {
 
 after(async () => {
   try {
+    await SeatClaim.deleteMany({ flightId: { $in: createdFlightIds } });
     await Booking.deleteMany({ user: { $in: createdUserIds } });
     await Flight.deleteMany({ _id: { $in: createdFlightIds } });
     await User.deleteMany({ _id: { $in: createdUserIds } });
@@ -760,6 +763,7 @@ test("a failed seat restoration aborts the cancellation without adding seats", a
   assert.equal(booking.status, "CONFIRMED");
   assert.equal(booking.cancelledAt, null);
   assert.equal(storedFlight.availableSeats, 1);
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 1);
 });
 
 test("a failure inside the cancellation body rolls back the booking change", async () => {
@@ -862,6 +866,7 @@ test("/me isolates users, uses stable pagination, and returns only the DTO", asy
         "id",
         "pricing",
         "seatCount",
+        "seatNumbers",
         "source",
         "status",
         "updatedAt",
@@ -903,4 +908,261 @@ test("Booking indexes are user-scoped and support stable pagination", async () =
   );
   assert.ok(paginationIndex);
   assert.deepEqual(paginationIndex.key, { user: 1, createdAt: -1, _id: -1 });
+});
+
+test("seat claims expose an empty full-capacity map without preallocating seats", async () => {
+  const flight = await createFlight({ totalSeats: 300 });
+  const response = await request(app).get(`/api/flights/${flight.id}/seats`).expect(200);
+  assert.deepEqual(response.body.data, {
+    flightId: flight.id, totalSeats: 300, availableSeats: 300,
+    layout: { columns: ["A", "B", "C", "D", "E", "F"] }, claimedSeatNumbers: [],
+  });
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 0);
+  await request(app).get("/api/flights/invalid/seats").expect(400);
+  await request(app).get(`/api/flights/${new mongoose.Types.ObjectId()}/seats`).expect(404);
+  const storedFlight = await Flight.collection.findOne({ _id: flight._id });
+  assert.equal(storedFlight.availableSeats, 300);
+});
+
+test("manual seats normalize, infer count, support the last partial row, and feed automatic allocation", async () => {
+  const flight = await createFlight({ totalSeats: 8 });
+  const manual = await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatCount: undefined, seatNumbers: [" 2b ", "1f"] })).expect(201);
+  assert.deepEqual(manual.body.data.booking.seatNumbers, ["1F", "2B"]);
+  assert.equal(manual.body.data.booking.seatCount, 2);
+  const automatic = await request(app).post("/api/bookings").set(authorization(secondToken))
+    .send(bookingRequest(flight._id, randomUUID(), { source: "AI", seatCount: 3 })).expect(201);
+  assert.deepEqual(automatic.body.data.booking.seatNumbers, ["1A", "1B", "1C"]);
+  const defaulted = await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send({ flightId: flight.id, idempotencyKey: randomUUID() }).expect(201);
+  assert.deepEqual(defaulted.body.data.booking.seatNumbers, ["1D"]);
+  const map = await request(app).get(`/api/flights/${flight.id}/seats`).expect(200);
+  assert.deepEqual(map.body.data.claimedSeatNumbers, ["1A", "1B", "1C", "1D", "1F", "2B"]);
+  assert.equal(map.body.data.availableSeats, 2);
+  const stored = await Booking.findById(manual.body.data.booking.id);
+  assert.equal(stored.seatSelectionMode, "MANUAL");
+  assert.equal("seatSelectionMode" in manual.body.data.booking, false);
+});
+
+test("automatic selection uses numeric row order and skips occupied seats", async () => {
+  const flight = await createFlight({ totalSeats: 62 });
+  await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatNumbers: ["1A"] })).expect(201);
+  const result = await request(app).post("/api/bookings").set(authorization(secondToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatCount: 7 })).expect(201);
+  assert.deepEqual(result.body.data.booking.seatNumbers, ["1B", "1C", "1D", "1E", "1F", "2A", "2B"]);
+  await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatCount: 2, seatNumbers: ["11B", "10A"] })).expect(201);
+  const map = await request(app).get(`/api/flights/${flight.id}/seats`).expect(200);
+  assert.deepEqual(map.body.data.claimedSeatNumbers.slice(-2), ["10A", "11B"]);
+});
+
+test("manual seat input rejects empty, malformed, repeated, mismatched and nonexistent seats", async () => {
+  const flight = await createFlight({ totalSeats: 8 });
+  for (const overrides of [
+    { seatNumbers: [] }, { seatNumbers: null }, { seatNumbers: "1A" }, { seatNumbers: [1] },
+    { seatNumbers: ["1A", " 1a "] }, { seatNumbers: ["01A"] }, { seatNumbers: ["0A"] },
+    { seatNumbers: ["1G"] }, { seatNumbers: ["2C"] }, { seatNumbers: ["99999999999999999999A"] },
+    { seatNumbers: ["1A"], seatCount: 2 }, { seatNumbers: ["1A"], seatCount: null },
+  ]) {
+    const response = await request(app).post("/api/bookings").set(authorization(firstToken))
+      .send(bookingRequest(flight._id, randomUUID(), overrides)).expect(400);
+    assert.equal(response.body.error.code, "INVALID_REQUEST");
+  }
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 0);
+  assert.equal(await Booking.countDocuments({ flight: flight._id }), 0);
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 8);
+});
+
+test("manual idempotency ignores seat order and detects different seats or selection modes", async () => {
+  const flight = await createFlight();
+  const body = bookingRequest(flight._id, randomUUID(), { seatCount: 2, seatNumbers: ["1B", "1A"] });
+  const created = await request(app).post("/api/bookings").set(authorization(firstToken)).send(body).expect(201);
+  const replay = await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send({ ...body, seatNumbers: ["1a", "1b"] }).expect(200);
+  assert.equal(replay.body.data.booking.id, created.body.data.booking.id);
+  assert.deepEqual(replay.body.data.booking.seatNumbers, ["1A", "1B"]);
+  for (const seatNumbers of [["1A", "1C"], undefined]) {
+    const conflict = await request(app).post("/api/bookings").set(authorization(firstToken))
+      .send({ ...body, seatNumbers }).expect(409);
+    assert.equal(conflict.body.error.code, "IDEMPOTENCY_KEY_CONFLICT");
+  }
+  const autoBody = bookingRequest(flight._id);
+  const automatic = await request(app).post("/api/bookings").set(authorization(firstToken)).send(autoBody).expect(201);
+  const switched = await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send({ ...autoBody, seatNumbers: automatic.body.data.booking.seatNumbers }).expect(409);
+  assert.equal(switched.body.error.code, "IDEMPOTENCY_KEY_CONFLICT");
+  const autoReplay = await request(app).post("/api/bookings").set(authorization(firstToken)).send(autoBody).expect(200);
+  assert.deepEqual(autoReplay.body.data.booking.seatNumbers, automatic.body.data.booking.seatNumbers);
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 3);
+});
+
+test("claim documents have only two business fields and a flight-scoped unique index", async () => {
+  const flight = await createFlight();
+  await request(app).post("/api/bookings").set(authorization(firstToken)).send(bookingRequest(flight._id)).expect(201);
+  const claim = await SeatClaim.findOne({ flightId: flight._id }).lean();
+  assert.deepEqual(Object.keys(claim).sort(), ["_id", "flightId", "seatNumber"]);
+  const index = (await SeatClaim.collection.indexes()).find(({ name }) => name === "unique_flight_seat_claim");
+  assert.equal(index.unique, true);
+  assert.deepEqual(index.key, { flightId: 1, seatNumber: 1 });
+  await assert.rejects(() => SeatClaim.create({ flightId: flight._id, seatNumber: claim.seatNumber }), { code: 11000 });
+  const other = await createFlight();
+  await request(app).post("/api/bookings").set(authorization(secondToken))
+    .send(bookingRequest(other._id, randomUUID(), { seatNumbers: [claim.seatNumber] })).expect(201);
+});
+
+test("competing manual bookings choose one winner and overlapping multi-seat bookings roll back", async () => {
+  const flight = await createFlight({ totalSeats: 5 });
+  const results = await Promise.all([firstToken, secondToken].map((token) =>
+    request(app).post("/api/bookings").set(authorization(token))
+      .send(bookingRequest(flight._id, randomUUID(), { seatNumbers: ["1B"] })),
+  ));
+  assert.deepEqual(results.map(({ status }) => status).sort(), [201, 409]);
+  assert.equal(results.find(({ status }) => status === 409).body.error.code, "SEAT_UNAVAILABLE");
+  const overlapping = await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatCount: 2, seatNumbers: ["1A", "1B"] })).expect(409);
+  assert.equal(overlapping.body.error.code, "SEAT_UNAVAILABLE");
+  assert.deepEqual((await SeatClaim.find({ flightId: flight._id }).lean()).map(({ seatNumber }) => seatNumber), ["1B"]);
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 4);
+  assert.equal(await Booking.countDocuments({ flight: flight._id }), 1);
+});
+
+test("mixed automatic and manual booking concurrency preserves all inventory representations", async () => {
+  const flight = await createFlight({ totalSeats: 8 });
+  const results = await Promise.all([
+    ...Array.from({ length: 4 }, () => request(app).post("/api/bookings").set(authorization(firstToken))
+      .send(bookingRequest(flight._id, randomUUID(), { seatCount: 2, source: "AI" }))),
+    request(app).post("/api/bookings").set(authorization(secondToken))
+      .send(bookingRequest(flight._id, randomUUID(), { seatCount: 2, seatNumbers: ["1A", "1B"] })),
+  ]);
+  assert.ok(results.every(({ status }) => status === 201 || status === 409));
+  const claims = await SeatClaim.find({ flightId: flight._id }).lean();
+  const bookings = await Booking.find({ flight: flight._id, status: "CONFIRMED" }).lean();
+  const seats = bookings.flatMap(({ seatNumbers }) => seatNumbers);
+  assert.equal(new Set(seats).size, seats.length);
+  assert.deepEqual(claims.map(({ seatNumber }) => seatNumber).sort(), seats.sort());
+  assert.equal((await Flight.findById(flight._id)).availableSeats + claims.length, 8);
+});
+
+test("claim inserts are rolled back if the booking insert fails", async (t) => {
+  const flight = await createFlight({ totalSeats: 3 });
+  t.mock.method(Booking, "create", async () => { throw new Error("injected failure after claims"); });
+  await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatCount: 2 })).expect(500);
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 0);
+  assert.equal(await Booking.countDocuments({ flight: flight._id }), 0);
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 3);
+});
+
+test("automatic allocation recomputes after a real transaction retry and an intervening booking", async (t) => {
+  const flight = await createFlight({ totalSeats: 4 });
+  const originalStart = mongoose.startSession.bind(mongoose);
+  let intercepted = false;
+  t.mock.method(mongoose, "startSession", async (...args) => {
+    const session = await originalStart(...args);
+    if (!intercepted) {
+      intercepted = true;
+      const abort = session.abortTransaction.bind(session);
+      let intervened = false;
+      session.abortTransaction = async (...abortArgs) => {
+        await abort(...abortArgs);
+        if (!intervened) {
+          intervened = true;
+          await request(app).post("/api/bookings").set(authorization(secondToken))
+            .send(bookingRequest(flight._id, randomUUID(), { seatNumbers: ["1A"] })).expect(201);
+        }
+      };
+    }
+    return session;
+  });
+  const originalCreate = Booking.create;
+  let creates = 0;
+  t.mock.method(Booking, "create", async function (...args) {
+    const result = await originalCreate.apply(this, args);
+    if (++creates === 1) throw new mongoose.mongo.MongoServerError({
+      message: "injected write conflict after allocation", code: 112, errorLabels: ["TransientTransactionError"],
+    });
+    return result;
+  });
+  const response = await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id)).expect(201);
+  assert.deepEqual(response.body.data.booking.seatNumbers, ["1B"]);
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 2);
+  assert.equal(await Booking.countDocuments({ flight: flight._id }), 2);
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 2);
+});
+
+test("repeated cancellation and replay of an old booking do not delete a replacement claim", async () => {
+  const flight = await createFlight({ totalSeats: 2 });
+  const body = bookingRequest(flight._id, randomUUID(), { seatNumbers: ["1A"] });
+  const created = await request(app).post("/api/bookings").set(authorization(firstToken)).send(body).expect(201);
+  const url = `/api/bookings/${created.body.data.booking.id}/cancel`;
+  await request(app).patch(url).set(authorization(firstToken)).expect(200);
+  await request(app).post("/api/bookings").set(authorization(secondToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatNumbers: ["1A"] })).expect(201);
+  const repeat = await request(app).patch(url).set(authorization(firstToken)).expect(200);
+  assert.equal(repeat.body.meta.alreadyCancelled, true);
+  const replay = await request(app).post("/api/bookings").set(authorization(firstToken)).send(body).expect(200);
+  assert.equal(replay.body.data.booking.status, "CANCELLED");
+  assert.deepEqual(replay.body.data.booking.seatNumbers, ["1A"]);
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 1);
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 1);
+});
+
+test("missing claims abort cancellation without restoring seats or losing the confirmed booking", async () => {
+  const flight = await createFlight({ totalSeats: 3 });
+  const created = await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatCount: 2 })).expect(201);
+  await SeatClaim.deleteOne({ flightId: flight._id, seatNumber: "1A" });
+  const response = await request(app).patch(`/api/bookings/${created.body.data.booking.id}/cancel`)
+    .set(authorization(firstToken)).expect(500);
+  assert.equal(response.body.error.code, "BOOKING_CONSISTENCY_ERROR");
+  assert.equal((await Booking.findById(created.body.data.booking.id)).status, "CONFIRMED");
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 1);
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 1);
+});
+
+test("claim shortages with sufficient counter capacity are reported and rolled back", async () => {
+  const flight = await createFlight({ totalSeats: 3 });
+  await SeatClaim.insertMany(["1A", "1B"].map((seatNumber) => ({ flightId: flight._id, seatNumber })));
+  const response = await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatCount: 2 })).expect(500);
+  assert.equal(response.body.error.code, "BOOKING_CONSISTENCY_ERROR");
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 3);
+  assert.equal(await Booking.countDocuments({ flight: flight._id }), 0);
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 2);
+});
+
+test("inventory repair restores claims from confirmed booking seats and corrects the counter", async () => {
+  const flight = await createFlight({ totalSeats: 4 });
+  await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatNumbers: ["1B"] })).expect(201);
+  await SeatClaim.deleteOne({ flightId: flight._id, seatNumber: "1B" });
+  await SeatClaim.create({ flightId: flight._id, seatNumber: "1D" });
+  await Flight.updateOne({ _id: flight._id }, { $set: { availableSeats: 1 } });
+  const bookings = await Booking.find({ flight: flight._id }).lean();
+  const before = inspectFlightInventory(await Flight.findById(flight._id).lean(), bookings,
+    await SeatClaim.find({ flightId: flight._id }).lean());
+  assert.deepEqual(before.missingClaims, ["1B"]);
+  assert.deepEqual(before.unexpectedClaims, ["1D"]);
+  assert.equal(before.repairable, true);
+  await repairFlightInventory(flight._id);
+  assert.deepEqual((await SeatClaim.find({ flightId: flight._id }).lean()).map(({ seatNumber }) => seatNumber), ["1B"]);
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 3);
+});
+
+test("a claim unique-index failure returns SEAT_UNAVAILABLE and rolls back the whole booking", async (t) => {
+  const flight = await createFlight({ totalSeats: 3 });
+  t.mock.method(SeatClaim, "insertMany", async () => {
+    throw new mongoose.mongo.MongoServerError({
+      message: "E11000 duplicate key unique_flight_seat_claim", code: 11000,
+      keyPattern: { flightId: 1, seatNumber: 1 }, keyValue: { flightId: flight._id, seatNumber: "1A" },
+    });
+  });
+  const response = await request(app).post("/api/bookings").set(authorization(firstToken))
+    .send(bookingRequest(flight._id, randomUUID(), { seatNumbers: ["1A"] })).expect(409);
+  assert.equal(response.body.error.code, "SEAT_UNAVAILABLE");
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 3);
+  assert.equal(await Booking.countDocuments({ flight: flight._id }), 0);
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 0);
 });

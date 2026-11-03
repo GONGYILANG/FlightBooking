@@ -59,6 +59,23 @@ const bookingSchema = new Schema(
       max: 9,
       default: 1,
     },
+    seatNumbers: {
+      type: [String],
+      default: undefined,
+      required: true,
+      validate: {
+        validator(seats) {
+          return seats.length === this.seatCount && seats.length >= 1 && seats.length <= 9 &&
+            new Set(seats).size === seats.length && seats.every((seat) => /^[1-9]\d*[A-F]$/.test(seat));
+        },
+        message: "seatNumbers must contain seatCount distinct valid seat numbers",
+      },
+    },
+    seatSelectionMode: {
+      type: String,
+      required: true,
+      enum: ["AUTO", "MANUAL"],
+    },
     source: {
       type: String,
       enum: ["UI", "AI"],

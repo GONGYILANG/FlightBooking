@@ -28,6 +28,7 @@ Content-Type: application/json
 | Flights | `GET` | `/api/flights/search` | No |
 | Flights | `GET` | `/api/flights/:flightId` | No |
 | Bookings | `POST` | `/api/bookings` | Yes |
+| Flights | `GET` | `/api/flights/:flightId/seats` | No |
 | Bookings | `GET` | `/api/bookings/me` | Yes |
 | Bookings | `GET` | `/api/bookings/:bookingId` | Yes |
 | Bookings | `PATCH` | `/api/bookings/:bookingId/cancel` | Yes |
@@ -202,6 +203,7 @@ Flight status is `SCHEDULED`, `DELAYED`, `CANCELLED`, `DEPARTED`, or `ARRIVED`. 
   "bookingReference": "BK1A2B3C4D5E6",
   "flight": { "...": "full public Flight object" },
   "seatCount": 2,
+  "seatNumbers": ["1A", "1B"],
   "pricing": {
     "unitAmount": "380.00",
     "totalAmount": "760.00",
@@ -216,7 +218,7 @@ Flight status is `SCHEDULED`, `DELAYED`, `CANCELLED`, `DEPARTED`, or `ARRIVED`. 
 }
 ```
 
-`source` is `UI` or `AI`; `status` is `CONFIRMED` or `CANCELLED`. Public Booking objects omit the user ID, password data, `idempotencyKey`, internal cent values, and Mongoose fields.
+`source` is `UI` or `AI`; `status` is `CONFIRMED` or `CANCELLED`. `seatNumbers` contains the actual assigned seats, including automatically assigned seats, and remains on cancelled orders. Public Booking objects omit the user ID, password data, `idempotencyKey`, internal `seatSelectionMode`, internal cent values, and Mongoose fields.
 
 ### Session and Turn
 
@@ -521,15 +523,33 @@ GET /api/flights/66a1b2c3d4e5f67890123456
 
 An invalid ID returns `400 INVALID_REQUEST`; an unknown flight returns `404 FLIGHT_NOT_FOUND`.
 
+### `GET /api/flights/:flightId/seats`
+
+Public endpoint for rendering a seat map. Every flight uses the fixed six columns `A` through `F`; rows start at 1 and stop after exactly the existing `totalSeats` (the last row may be incomplete). The response's `layout.columns` is a backend constant, not a database entity. Empty seats are never preallocated, and existing Flight documents need no new fields or migration.
+
+```json
+{
+  "data": {
+    "flightId": "66a1b2c3d4e5f67890123456",
+    "totalSeats": 250,
+    "availableSeats": 248,
+    "layout": { "columns": ["A", "B", "C", "D", "E", "F"] },
+    "claimedSeatNumbers": ["12A", "12B"]
+  }
+}
+```
+
+Only legitimate seats absent from `claimedSeatNumbers` are free. The returned count is derived from capacity minus claims. Flight status and the booking cutoff still govern whether bookings are permitted; this endpoint does not reserve seats. Invalid IDs return `400`, unknown flights `404 FLIGHT_NOT_FOUND`.
+
 ## Booking API
 
 Booking endpoints operate only on the user identified by the Bearer token. A client cannot select a user in the request body.
 
 ### `POST /api/bookings`
 
-Creates a simulated booking and atomically decrements available seats.
+Creates a simulated booking and atomically assigns seats, inserts seat claims, and decrements available seats. Existing AI clients may continue sending only `seatCount`; the backend assigns their seats automatically.
 
-Creation and individual cancellation use MongoDB Atlas cross-collection transactions. Keep the unique `{ user: 1, idempotencyKey: 1 }` booking index deployed. The driver retries transient write conflicts and uncertain commit acknowledgements within a 10-second transaction timeout.
+Creation and cancellation use MongoDB Atlas cross-collection transactions. Keep the unique `{ user: 1, idempotencyKey: 1 }` booking index and `{ flightId: 1, seatNumber: 1 }` claim index deployed. Claims have only these two business fields plus MongoDB `_id`, without timestamps or booking references. There is no separate API for writing claims. The driver retries transient write conflicts and uncertain commit acknowledgements within a 10-second transaction timeout; automatic seat selection is recomputed on a transaction-body retry.
 
 ```json
 {
@@ -543,11 +563,14 @@ Creation and individual cancellation use MongoDB Atlas cross-collection transact
 | Field | Required | Default | Rules |
 | --- | --- | --- | --- |
 | `flightId` | Yes | — | Valid MongoDB ObjectId. |
-| `seatCount` | No | `1` | Integer from 1 to 9. |
+| `seatCount` | No | Selected-seat count, otherwise `1` | Integer from 1 to 9; must match `seatNumbers.length` when both are supplied. |
+| `seatNumbers` | No | Automatic allocation | 1–9 distinct seat strings, trimmed and uppercased; only columns `A`–`F`, with each seat within `totalSeats`. `null`, empty arrays and malformed values are errors. |
 | `source` | No | `UI` | `UI` or `AI`, trimmed and uppercased. |
 | `idempotencyKey` | Yes | — | Canonical UUID, trimmed and lowercased. |
 
-The same user and key with the same `flightId`, `seatCount`, and `source` returns the original booking without decrementing seats again. Reusing the key with different payload fields returns `409 IDEMPOTENCY_KEY_CONFLICT`. Different users may use the same UUID.
+Without `seatNumbers`, the backend selects the first N free seats in numeric row order and the fixed `A`–`F` column order: `1A`, `1B`, ..., `1F`, `2A`, etc. It skips claims and does not guarantee adjacent seats. UI clients may add `"seatNumbers": ["12A", "12B"]` to request exact seats; occupied selections return `409 SEAT_UNAVAILABLE` rather than being replaced.
+
+The same user and key with the same `flightId`, resolved `seatCount`, `source`, selection mode and requested seat set returns the original booking without inserting claims or decrementing seats again. Manual seat order is ignored. Automatic replays return the first successful assignment without choosing again. Changing any of these inputs, including switching between automatic and manual selection, returns `409 IDEMPOTENCY_KEY_CONFLICT`. Different users may use the same UUID.
 
 Initial creation returns `201`:
 
@@ -568,7 +591,7 @@ On a timeout or `500 BOOKING_CREATION_FAILED`, the commit outcome may be unknown
 
 A flight must exist, be in the future, have status `SCHEDULED` or `DELAYED`, and have `availableSeats >= seatCount`.
 
-Common errors include `400 INVALID_REQUEST`, authentication errors, `409 FLIGHT_NOT_FOUND_OR_SOLD_OUT`, `409 IDEMPOTENCY_KEY_CONFLICT`, `409 BOOKING_CUTOFF_PASSED`, `503 BOOKING_WRITES_PAUSED`, and consistency-related `500` errors.
+Common errors include `400 INVALID_REQUEST`, authentication errors, `409 FLIGHT_NOT_FOUND_OR_SOLD_OUT`, `409 SEAT_UNAVAILABLE`, `409 IDEMPOTENCY_KEY_CONFLICT`, `409 BOOKING_CUTOFF_PASSED`, `503 BOOKING_WRITES_PAUSED`, and consistency-related `500` errors. Sufficient counter capacity but too few free claims is an inventory consistency error; all writes roll back.
 
 ### `GET /api/bookings/me`
 
@@ -979,7 +1002,7 @@ The response `meta` contains:
 }
 ```
 
-Changing a flight to `CANCELLED` cancels all its confirmed bookings, sets `cancellation.source=FLIGHT`, and restores `availableSeats` to `totalSeats`. Repeated requests continue repairing missed bookings without changing already cancelled ones.
+Changing a flight to `CANCELLED` closes it to new bookings, then atomically cancels its confirmed bookings, deletes its claims, and restores `availableSeats` to `totalSeats`. Repeated requests continue repairing missed cleanup without changing already cancelled orders. Individual cancellations delete only the order's recorded seats and restore the count in the same transaction; already cancelled orders never delete claims again.
 
 The current API does not create or physically delete flights. Cancellation represents deletion from normal availability.
 
@@ -998,6 +1021,10 @@ npm run reconcile:admin
 ```
 
 Repairs require a maintenance window and `BOOKING_WRITES_PAUSED=true`.
+
+Before enabling seat-aware bookings, cancel/remove old orders using the previous version as planned, then run `npm run indexes` from the backend directory to deploy the claim unique index. No seat initialization script, layout collection, Flight migration, or automatic counter reset is required. Existing flight capacities and available-seat counters remain in use, and empty flights have no claim documents.
+
+`npm run reconcile:bookings` reports counter/claim mismatches, invalid or duplicated order seats, and orphaned records in bounded flight batches without changing inventory. With booking writes actually paused on every API instance and `BOOKING_WRITES_PAUSED=true` set in the script shell, `npm run reconcile:bookings -- --apply` repairs claims and counters from CONFIRMED order seats; invalid capacities, ambiguous orders and orphaned records block repair. Setting the variable in a script shell does not pause another running process. `npm run reconcile:admin -- --apply` also removes claims from cancelled flights. These commands repair an identified mismatch, rather than initializing all flights.
 
 ## Error code reference
 
@@ -1021,6 +1048,7 @@ Repairs require a maintenance window and `BOOKING_WRITES_PAUSED=true`.
 | 404 | `ROUTE_NOT_FOUND` | The route does not exist. |
 | 409 | `EMAIL_ALREADY_REGISTERED` | The email is already registered. |
 | 409 | `FLIGHT_NOT_FOUND_OR_SOLD_OUT` | The flight cannot be booked or lacks seats. |
+| 409 | `SEAT_UNAVAILABLE` | One or more requested seats are already occupied. |
 | 409 | `IDEMPOTENCY_KEY_CONFLICT` | A booking key was reused with different payload fields. |
 | 409 | `BOOKING_NOT_CANCELLABLE` | The booking cannot currently be cancelled. |
 | 409 | `SESSION_ID_CONFLICT` | The globally unique session ID is owned by someone else or is being deleted. |
@@ -1033,7 +1061,7 @@ Repairs require a maintenance window and `BOOKING_WRITES_PAUSED=true`.
 | 409 | `FLIGHT_SCHEDULE_IN_PAST` | The new departure time is not in the future. |
 | 409 | `USER_STATUS_CONFLICT` | Another request changed the user status. |
 | 409 | `FLIGHT_UPDATE_CONFLICT` | Another request changed the flight. |
-| 500 | `BOOKING_CREATION_FAILED` | Booking creation failed after compensation. |
+| 500 | `BOOKING_CREATION_FAILED` | Booking creation could not be confirmed; retry the same payload and key. |
 | 500 | `BOOKING_CONSISTENCY_ERROR` | Booking and inventory state cannot be confirmed safely. |
 | 500 | `ADMIN_CONSISTENCY_ERROR` | An administrator operation requires reconciliation. |
 | 503 | `BOOKING_WRITES_PAUSED` | Booking creation and cancellation are paused. |

@@ -153,10 +153,7 @@ test("me rejects missing, forged, and expired tokens", async () => {
     { type: "access" },
     process.env.JWT_SECRET,
     {
-      algorithm: "HS256",
       subject: testUserId,
-      issuer: "flight-booking-api",
-      audience: "flight-booking-android",
       expiresIn: -1,
     },
   );
@@ -169,8 +166,8 @@ test("me rejects missing, forged, and expired tokens", async () => {
 
 test("a signed token must be saved and have an expiry before it can authenticate", async () => {
   const options = {
-    algorithm: "HS256", subject: testUserId, issuer: "flight-booking-api",
-    audience: "flight-booking-android", jwtid: randomUUID(),
+    subject: testUserId,
+    jwtid: randomUUID(),
   };
   const unsaved = jwt.sign({ type: "access" }, process.env.JWT_SECRET, { ...options, expiresIn: "24h" });
   const response = await request(app).get("/api/auth/me")

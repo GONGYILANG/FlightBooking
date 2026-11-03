@@ -3,6 +3,7 @@ import { test } from "node:test";
 import mongoose from "mongoose";
 import Booking from "../src/models/Booking.js";
 import Flight from "../src/models/Flight.js";
+import SeatClaim from "../src/models/SeatClaim.js";
 import {
   updateAdminFlight,
   updateAdminFlightSchedule,
@@ -108,7 +109,12 @@ test("admin flight price update changes only the current Flight price", async ()
   }
 });
 
-test("admin flight cancellation updates bookings and normalizes inventory", async () => {
+test("admin flight cancellation updates bookings and normalizes inventory", async (t) => {
+  t.mock.method(mongoose, "startSession", async () => ({
+    withTransaction: async (work) => work({}),
+    endSession: async () => {},
+  }));
+  t.mock.method(SeatClaim, "deleteMany", async () => ({ deletedCount: 30 }));
   const actorId = new mongoose.Types.ObjectId();
   let stored = populatedFlight({ availableSeats: 70 });
   let findByIdCalls = 0;

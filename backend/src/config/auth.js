@@ -12,8 +12,5 @@ if (!/^[1-9]\d*[smhd]$/.test(jwtExpiresIn)) {
 export const authConfig = Object.freeze({
   jwtSecret,
   jwtExpiresIn,
-  jwtAlgorithm: "HS256",
-  jwtIssuer: "flight-booking-api",
-  jwtAudience: "flight-booking-api",
   bcryptCost: 12,
 });

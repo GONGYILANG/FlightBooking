@@ -20,10 +20,7 @@ function issueAccessToken(user) {
     { type: "access" },
     authConfig.jwtSecret,
     {
-      algorithm: authConfig.jwtAlgorithm,
       subject: user._id.toString(),
-      issuer: authConfig.jwtIssuer,
-      audience: authConfig.jwtAudience,
       expiresIn: authConfig.jwtExpiresIn,
       jwtid: randomUUID(),
     },
@@ -102,11 +99,7 @@ export async function loginUser({ email, password }) {
 
 export function verifyAccessToken(token) {
   try {
-    const payload = jwt.verify(token, authConfig.jwtSecret, {
-      algorithms: [authConfig.jwtAlgorithm],
-      issuer: authConfig.jwtIssuer,
-      audience: authConfig.jwtAudience,
-    });
+    const payload = jwt.verify(token, authConfig.jwtSecret);
 
     if (
       typeof payload !== "object" ||

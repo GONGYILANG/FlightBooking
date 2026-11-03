@@ -4,7 +4,7 @@ import Airport from "../models/Airport.js";
 import Booking from "../models/Booking.js";
 import Flight from "../models/Flight.js";
 import User from "../models/User.js";
-import { cancelBookingRecord, toBookingResponse } from "./bookingService.js";
+import { cancelBookingRecord, cancelFlightBookings, toBookingResponse } from "./bookingService.js";
 import {
   bookableFlightStatuses,
   flightPopulate,
@@ -447,45 +447,13 @@ function assertStatusTransition(currentStatus, requestedStatus) {
 }
 
 async function cancelBookingsForFlight({ flight, actorId, reason }) {
-  const cancelledAt = flight.statusUpdatedAt
-    ? new Date(flight.statusUpdatedAt)
-    : new Date();
-  let result;
   try {
-    result = await Booking.updateMany(
-      { flight: flight._id, status: "CONFIRMED" },
-      {
-        $set: {
-          status: "CANCELLED",
-          cancelledAt,
-          cancellationSource: "FLIGHT",
-          cancelledBy: actorId,
-          cancellationReason: flight.statusReason ?? reason,
-        },
-      },
-      { runValidators: true },
-    );
+    return await cancelFlightBookings({ flight, actorId, reason });
   } catch (_error) {
     throw adminConsistencyError("FLIGHT_CANCEL_BOOKINGS", {
       flightId: flight._id,
     });
   }
-
-  try {
-    const inventoryResult = await Flight.updateOne(
-      { _id: flight._id, status: "CANCELLED" },
-      { $set: { availableSeats: flight.totalSeats } },
-    );
-    if (inventoryResult.matchedCount !== 1) {
-      throw new Error("Cancelled flight inventory update did not match");
-    }
-  } catch (_error) {
-    throw adminConsistencyError("FLIGHT_CANCEL_INVENTORY", {
-      flightId: flight._id,
-    });
-  }
-
-  return result.modifiedCount;
 }
 
 export async function updateAdminFlightSchedule({

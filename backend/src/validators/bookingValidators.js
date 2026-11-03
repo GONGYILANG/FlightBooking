@@ -40,6 +40,20 @@ function parseSeatCount(value, fields) {
   return value;
 }
 
+function parseSeatNumbers(value, fields) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length < 1 || value.length > 9 ||
+      value.some((seat) => typeof seat !== "string")) {
+    fields.push({ field: "seatNumbers", message: "seatNumbers must contain 1 to 9 seat number strings" });
+    return undefined;
+  }
+  const seats = value.map((seat) => seat.trim().toUpperCase());
+  if (seats.some((seat) => !/^[1-9]\d*[A-F]$/.test(seat)) || new Set(seats).size !== seats.length) {
+    fields.push({ field: "seatNumbers", message: "seatNumbers must contain distinct valid seat numbers" });
+  }
+  return seats;
+}
+
 function parseSource(value, fields) {
   if (value === undefined) {
     return "UI";
@@ -94,7 +108,11 @@ export function validateCreateBooking(request, _response, next) {
   const body = requestBody(request);
   const fields = [];
   const flightId = parseFlightId(body.flightId, fields);
-  const seatCount = parseSeatCount(body.seatCount, fields);
+  const seatNumbers = parseSeatNumbers(body.seatNumbers, fields);
+  const seatCount = parseSeatCount(body.seatCount === undefined ? seatNumbers?.length : body.seatCount, fields);
+  if (seatNumbers && seatCount !== seatNumbers.length) {
+    fields.push({ field: "seatCount", message: "seatCount must equal the number of selected seats" });
+  }
   const source = parseSource(body.source, fields);
   const idempotencyKey = parseIdempotencyKey(
     body.idempotencyKey,
@@ -110,6 +128,7 @@ export function validateCreateBooking(request, _response, next) {
     seatCount,
     source,
     idempotencyKey,
+    ...(seatNumbers !== undefined ? { seatNumbers } : {}),
   };
   next();
 }

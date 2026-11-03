@@ -47,8 +47,7 @@ try {
   user = await User.create({email: 'middle-integration-' + randomUUID() + '@example.com',
     displayName: 'Middle integration', passwordHash: 'unused', status: 'ACTIVE'});
   const token = jwt.sign({type: 'access'}, process.env.JWT_SECRET, {
-    algorithm: 'HS256', subject: user._id.toString(), expiresIn: '24h', jwtid: randomUUID(),
-    issuer: 'flight-booking-api', audience: 'flight-booking-android',
+    subject: user._id.toString(), expiresIn: '24h', jwtid: randomUUID()
   });
   await User.updateOne({_id: user._id}, {$push: {tokens: token}});
   server = app.listen(0, '127.0.0.1');

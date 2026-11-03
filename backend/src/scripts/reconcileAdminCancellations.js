@@ -2,6 +2,8 @@ import "dotenv/config";
 import { connectDatabase, disconnectDatabase } from "../config/database.js";
 import Booking from "../models/Booking.js";
 import Flight from "../models/Flight.js";
+import SeatClaim from "../models/SeatClaim.js";
+import { cancelFlightBookings } from "../services/bookingService.js";
 
 const applyChanges = process.argv.includes("--apply");
 
@@ -33,6 +35,7 @@ async function inspect() {
     cancelledFlights,
     confirmedBookings,
     missingCancellationBookings,
+    remainingClaims: await SeatClaim.find({ flightId: { $in: flightIds } }).select("flightId seatNumber").lean(),
     inventoryMismatches: cancelledFlights.filter(
       (flight) => flight.availableSeats !== flight.totalSeats,
     ),
@@ -58,6 +61,7 @@ async function reconcileAdminCancellations() {
         missingCancellationSourceCount:
           report.missingCancellationBookings.length,
         inventoryMismatchCount: report.inventoryMismatches.length,
+        remainingClaimCount: report.remainingClaims.length,
         confirmedBookingsOnCancelledFlights: report.confirmedBookings.map(
           (booking) => ({
             bookingId: booking._id.toString(),
@@ -86,23 +90,7 @@ async function reconcileAdminCancellations() {
     report.cancelledFlights.map((flight) => [flight._id.toString(), flight]),
   );
   for (const flight of report.cancelledFlights) {
-    const cancelledAt = flight.statusUpdatedAt ?? new Date();
-    await Booking.updateMany(
-      { flight: flight._id, status: "CONFIRMED" },
-      {
-        $set: {
-          status: "CANCELLED",
-          cancelledAt,
-          cancellationSource: "FLIGHT",
-          cancelledBy: flight.statusUpdatedBy ?? null,
-          cancellationReason: flight.statusReason ?? null,
-        },
-      },
-    );
-    await Flight.updateOne(
-      { _id: flight._id, status: "CANCELLED" },
-      { $set: { availableSeats: flight.totalSeats } },
-    );
+    await cancelFlightBookings({ flight, actorId: flight.statusUpdatedBy ?? null, reason: flight.statusReason ?? null });
   }
 
   for (const booking of report.missingCancellationBookings) {
@@ -136,7 +124,7 @@ async function reconcileAdminCancellations() {
   if (
     after.confirmedBookings.length > 0 ||
     after.missingCancellationBookings.length > 0 ||
-    after.inventoryMismatches.length > 0
+    after.inventoryMismatches.length > 0 || after.remainingClaims.length > 0
   ) {
     throw new Error("Administrator cancellation reconciliation did not converge");
   }

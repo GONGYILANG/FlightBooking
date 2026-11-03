@@ -3,7 +3,9 @@ import mongoose from "mongoose";
 import { serviceError } from "../errors.js";
 import Booking from "../models/Booking.js";
 import Flight from "../models/Flight.js";
+import SeatClaim from "../models/SeatClaim.js";
 import User from "../models/User.js";
+import { allocateSeats } from "./seatService.js";
 import {
   bookableFlightStatuses,
   flightPopulate,
@@ -76,6 +78,7 @@ export function toBookingResponse(booking) {
     bookingReference: booking.bookingReference,
     flight: populatedFlight ? toFlightResponse(populatedFlight) : null,
     seatCount: booking.seatCount,
+    seatNumbers: booking.seatNumbers ?? [],
     pricing: toPricingResponse(booking.priceSnapshot),
     source: booking.source,
     status: booking.status,
@@ -90,7 +93,10 @@ function bookingMatchesRequest(booking, input) {
   return (
     booking.flight?.toString() === input.flightId &&
     booking.seatCount === input.seatCount &&
-    booking.source === input.source
+    booking.source === input.source &&
+    booking.seatSelectionMode === (input.seatNumbers === undefined ? "AUTO" : "MANUAL") &&
+    (input.seatNumbers === undefined ||
+      JSON.stringify([...booking.seatNumbers].sort()) === JSON.stringify([...input.seatNumbers].sort()))
   );
 }
 
@@ -156,7 +162,7 @@ const transactionOptions = {
   timeoutMS: 10000,
 };
 
-async function runBookingTransaction(work) {
+export async function runBookingTransaction(work) {
   const session = await mongoose.startSession();
   try {
     // The driver retries write conflicts and retries an uncertain commit without
@@ -223,6 +229,12 @@ export async function createBooking(input) {
         );
       }
 
+      // Recompute on every transaction retry, after the guarded Flight write.
+      const seatNumbers = await allocateSeats(flight, input, session);
+      await SeatClaim.insertMany(
+        seatNumbers.map((seatNumber) => ({ flightId: flight._id, seatNumber })),
+        { session, ordered: true },
+      );
       const priceSnapshot = createPriceSnapshot(flight, input.seatCount);
       // The first argument must be an array: mongoose only treats { session } as options
       // in the array form, otherwise it tries to insert it as a second document.
@@ -234,6 +246,8 @@ export async function createBooking(input) {
             user: input.userId,
             flight: input.flightId,
             seatCount: input.seatCount,
+            seatNumbers,
+            seatSelectionMode: input.seatNumbers === undefined ? "AUTO" : "MANUAL",
             source: input.source,
             status: "CONFIRMED",
             idempotencyKey: input.idempotencyKey,
@@ -255,6 +269,11 @@ export async function createBooking(input) {
           booking: await loadBookingResponse(existing._id),
           idempotentReplay: true,
         };
+      }
+      const duplicate = error.writeErrors?.[0]?.err ?? error;
+      if (duplicate.keyPattern?.seatNumber || error.keyPattern?.seatNumber ||
+          error.message?.includes("unique_flight_seat_claim")) {
+        throw serviceError("SEAT_UNAVAILABLE", "One or more selected seats are already occupied", 409);
       }
     }
 
@@ -354,6 +373,18 @@ export async function cancelBookingRecord(filter, cancellation) {
         throw serviceError("BOOKING_NOT_CANCELLABLE", "Booking is not confirmed", 409);
       }
 
+      if (!transitioned.seatNumbers || transitioned.seatNumbers.length !== transitioned.seatCount ||
+          new Set(transitioned.seatNumbers).size !== transitioned.seatCount) {
+        throw consistencyError({ operation: "CANCEL_SEATS_MISSING", bookingId: transitioned._id, flightId: flight._id });
+      }
+      const released = await SeatClaim.deleteMany(
+        { flightId: flight._id, seatNumber: { $in: transitioned.seatNumbers } },
+        { session },
+      );
+      if (released.deletedCount !== transitioned.seatCount) {
+        throw consistencyError({ operation: "CANCEL_CLAIMS_MISSING", bookingId: transitioned._id, flightId: flight._id });
+      }
+
       const restoration = await Flight.updateOne(
         {
           _id: flight._id,
@@ -397,6 +428,34 @@ export async function cancelBookingRecord(filter, cancellation) {
       500,
     );
   }
+}
+
+// The caller first closes the flight to new bookings. Cleanup is atomic and retryable.
+export async function cancelFlightBookings({ flight, actorId, reason }) {
+  // API callers enforce the write gate; maintenance callers require writes paused.
+  return runBookingTransaction(async (session) => {
+    const result = await Booking.updateMany(
+      { flight: flight._id, status: "CONFIRMED" },
+      { $set: {
+        status: "CANCELLED",
+        cancelledAt: flight.statusUpdatedAt ?? new Date(),
+        cancellationSource: "FLIGHT",
+        cancelledBy: actorId,
+        cancellationReason: flight.statusReason ?? reason,
+      } },
+      { runValidators: true, session },
+    );
+    await SeatClaim.deleteMany({ flightId: flight._id }, { session });
+    const inventory = await Flight.updateOne(
+      { _id: flight._id, status: "CANCELLED" },
+      { $set: { availableSeats: flight.totalSeats } },
+      { session },
+    );
+    if (inventory.matchedCount !== 1) {
+      throw consistencyError({ operation: "FLIGHT_CANCEL_INVENTORY", flightId: flight._id });
+    }
+    return result.modifiedCount;
+  });
 }
 
 export async function listBookingsForUser({ userId, page = 1, limit = 20 }) {

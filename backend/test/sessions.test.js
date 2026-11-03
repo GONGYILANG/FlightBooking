@@ -29,10 +29,7 @@ before(async () => {
       });
       userIds.push(user._id);
       const token = jwt.sign({ type: "access" }, process.env.JWT_SECRET, {
-        algorithm: "HS256",
         subject: user._id.toString(),
-        issuer: "flight-booking-api",
-        audience: "flight-booking-android",
         expiresIn: "24h",
         jwtid: randomUUID(),
       });

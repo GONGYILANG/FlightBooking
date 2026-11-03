@@ -4,6 +4,7 @@ import Airline from "../models/Airline.js";
 import Airport from "../models/Airport.js";
 import Booking from "../models/Booking.js";
 import Flight from "../models/Flight.js";
+import SeatClaim from "../models/SeatClaim.js";
 import User from "../models/User.js";
 
 const airlineSeeds = [
@@ -190,6 +191,7 @@ async function seed() {
     Airport.init(),
     Flight.init(),
     Booking.init(),
+    SeatClaim.init(),
   ]);
 
   const { airlines, airports } = await upsertReferences();

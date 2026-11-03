@@ -5,6 +5,7 @@ import { after, before, test } from "node:test";
 import "dotenv/config";
 import jwt from "jsonwebtoken";
 import request from "supertest";
+import SeatClaim from "../src/models/SeatClaim.js";
 
 const [
   { default: app },
@@ -29,6 +30,7 @@ const createdUserIds = [];
 const createdFlightIds = [];
 const createdAirportIds = [];
 const createdAirlineIds = [];
+const assignedSeatOffsets = new Map();
 let airline;
 let originAirport;
 let destinationAirport;
@@ -40,10 +42,7 @@ let normalToken;
 
 async function tokenFor(subject) {
   const token = jwt.sign({ type: "access" }, process.env.JWT_SECRET, {
-    algorithm: "HS256",
     subject: subject.toString(),
-    issuer: "flight-booking-api",
-    audience: "flight-booking-api",
     expiresIn: "24h",
     jwtid: randomUUID(),
   });
@@ -99,11 +98,15 @@ async function createFlight({
 
 function bookingData({ user, flight, seatCount = 1, status = "CONFIRMED" }) {
   const key = randomUUID();
+  const offset = assignedSeatOffsets.get(flight.id) ?? 0;
+  assignedSeatOffsets.set(flight.id, offset + seatCount);
   return {
     bookingReference: `BK${key.replaceAll("-", "").slice(0, 12)}`,
     user: user._id,
     flight: flight._id,
     seatCount,
+    seatNumbers: Array.from({ length: seatCount }, (_, i) => `${Math.floor((offset + i) / 6) + 1}${"ABCDEF"[(offset + i) % 6]}`),
+    seatSelectionMode: "AUTO",
     source: "UI",
     status,
     idempotencyKey: key,
@@ -119,6 +122,15 @@ function bookingData({ user, flight, seatCount = 1, status = "CONFIRMED" }) {
   };
 }
 
+async function createStoredBookings(data) {
+  const result = await Booking.create(data);
+  const records = Array.isArray(result) ? result : [result];
+  const claims = records.filter(({ status }) => status === "CONFIRMED")
+    .flatMap((booking) => booking.seatNumbers.map((seatNumber) => ({ flightId: booking.flight, seatNumber })));
+  if (claims.length) await SeatClaim.insertMany(claims);
+  return result;
+}
+
 before(async () => {
   const connection = await connectDatabase();
   assert.equal(connection.name, testDatabaseName);
@@ -130,6 +142,7 @@ before(async () => {
     User.init(),
   ]);
 
+  await SeatClaim.init();
   airline = await Airline.create({
     code: randomLetters(3),
     name: `Admin Test Airline ${randomUUID()}`,
@@ -171,6 +184,7 @@ before(async () => {
 
 after(async () => {
   try {
+    await SeatClaim.deleteMany({ flightId: { $in: createdFlightIds } });
     await Booking.deleteMany({ user: { $in: createdUserIds } });
     await Flight.deleteMany({ _id: { $in: createdFlightIds } });
     await User.deleteMany({ _id: { $in: createdUserIds } });
@@ -225,7 +239,7 @@ test("admin routes require live ADMIN authorization", async () => {
 
 test("administrators can search users and inspect booking summaries safely", async () => {
   const flight = await createFlight();
-  await Booking.create(bookingData({ user: normalUser, flight }));
+  await createStoredBookings(bookingData({ user: normalUser, flight }));
 
   const list = await request(app)
     .get(
@@ -293,7 +307,7 @@ test("administrators can lock and restore users but cannot lock themselves", asy
 
 test("global booking management filters records without exposing internal fields", async () => {
   const flight = await createFlight();
-  const [first, second] = await Booking.create([
+  const [first, second] = await createStoredBookings([
     bookingData({ user: normalUser, flight }),
     bookingData({ user: otherUser, flight, status: "CANCELLED" }),
   ]);
@@ -325,7 +339,7 @@ test("global booking management filters records without exposing internal fields
 
 test("concurrent administrator cancellation restores inventory once", async () => {
   const flight = await createFlight({ totalSeats: 3, availableSeats: 1 });
-  const booking = await Booking.create(
+  const booking = await createStoredBookings(
     bookingData({ user: normalUser, flight, seatCount: 2 }),
   );
 
@@ -351,7 +365,7 @@ test("concurrent administrator cancellation restores inventory once", async () =
 
 test("user and administrator cancellation compete without restoring twice", async () => {
   const flight = await createFlight({ totalSeats: 3, availableSeats: 1 });
-  const booking = await Booking.create(bookingData({ user: normalUser, flight, seatCount: 2 }));
+  const booking = await createStoredBookings(bookingData({ user: normalUser, flight, seatCount: 2 }));
   const responses = await Promise.all([
     request(app).patch(`/api/bookings/${booking._id}/cancel`).set(authorization(normalToken)),
     request(app).patch(`/api/admin/bookings/${booking._id}/cancel`)
@@ -367,7 +381,7 @@ test("user and administrator cancellation compete without restoring twice", asyn
 
 test("administrator cancellation rolls back both writes after a restoration error", async (t) => {
   const flight = await createFlight({ totalSeats: 3, availableSeats: 1 });
-  const booking = await Booking.create(bookingData({ user: normalUser, flight, seatCount: 2 }));
+  const booking = await createStoredBookings(bookingData({ user: normalUser, flight, seatCount: 2 }));
   const originalUpdate = Flight.updateOne;
   t.mock.method(Flight, "updateOne", async function (...args) {
     await originalUpdate.apply(this, args);
@@ -384,7 +398,7 @@ test("administrator cancellation rolls back both writes after a restoration erro
 
 test("flight price updates preserve old snapshots and affect new bookings", async () => {
   const flight = await createFlight({ totalSeats: 5, availableSeats: 4 });
-  const oldBooking = await Booking.create(
+  const oldBooking = await createStoredBookings(
     bookingData({ user: normalUser, flight, seatCount: 1 }),
   );
 
@@ -413,7 +427,7 @@ test("flight price updates preserve old snapshots and affect new bookings", asyn
 
 test("administrators can list, inspect, and reschedule every flight status", async () => {
   const flight = await createFlight();
-  const booking = await Booking.create(
+  const booking = await createStoredBookings(
     bookingData({ user: normalUser, flight, seatCount: 1 }),
   );
 
@@ -533,7 +547,7 @@ test("flight PATCH validates fields and enforces status transitions", async () =
 
 test("cancelling a flight cancels confirmed bookings and is idempotent", async () => {
   const flight = await createFlight({ totalSeats: 5, availableSeats: 2 });
-  const bookings = await Booking.create([
+  const bookings = await createStoredBookings([
     bookingData({ user: normalUser, flight, seatCount: 1 }),
     bookingData({ user: otherUser, flight, seatCount: 2 }),
   ]);
@@ -546,6 +560,7 @@ test("cancelling a flight cancels confirmed bookings and is idempotent", async (
   assert.equal(cancelled.body.meta.affectedBookings, 2);
   assert.equal(cancelled.body.data.flight.status, "CANCELLED");
   assert.equal(cancelled.body.data.flight.availableSeats, 5);
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 0);
 
   const storedBookings = await Booking.find({
     _id: { $in: bookings.map(({ _id }) => _id) },
@@ -593,4 +608,30 @@ test("administrator indexes support the new stable list queries", async () => {
       ({ key }) => key.createdAt === -1 && key._id === -1,
     ),
   );
+});
+
+test("flight cancellation cleanup rolls back claims on failure and completes on retry", async (t) => {
+  const flight = await createFlight({ totalSeats: 5, availableSeats: 3 });
+  const booking = await createStoredBookings(bookingData({ user: normalUser, flight, seatCount: 2 }));
+  const originalUpdate = Flight.updateOne;
+  t.mock.method(Flight, "updateOne", async function (filter, ...args) {
+    if (filter._id.toString() === flight.id && filter.status === "CANCELLED") {
+      throw new Error("injected flight cancellation cleanup failure");
+    }
+    return originalUpdate.call(this, filter, ...args);
+  });
+  const body = { status: "CANCELLED", reason: "Operational cancellation" };
+  const response = await request(app).patch(`/api/admin/flights/${flight.id}`)
+    .set(authorization(adminToken)).send(body).expect(500);
+  assert.equal(response.body.error.code, "ADMIN_CONSISTENCY_ERROR");
+  assert.equal((await Flight.findById(flight._id)).status, "CANCELLED");
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 3);
+  assert.equal((await Booking.findById(booking._id)).status, "CONFIRMED");
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 2);
+  t.mock.restoreAll();
+  await request(app).patch(`/api/admin/flights/${flight.id}`)
+    .set(authorization(adminToken)).send(body).expect(200);
+  assert.equal((await Booking.findById(booking._id)).status, "CANCELLED");
+  assert.equal((await Flight.findById(flight._id)).availableSeats, 5);
+  assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 0);
 });
