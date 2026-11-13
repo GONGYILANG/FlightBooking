@@ -8,6 +8,7 @@ import type {
   FlightRangeSearchParams,
   FlightSearchParams,
   FlightSearchResult,
+  FlightSeats,
   Pagination,
   User,
 } from './types'
@@ -132,13 +133,25 @@ export function getFlight(flightId: string, signal?: AbortSignal) {
   return request<{ flight: Flight }>(`/api/flights/${encodeURIComponent(flightId)}`, { signal })
 }
 
-export function createBooking(flightId: string, seatCount: number, idempotencyKey: string) {
+export function getFlightSeats(flightId: string, signal?: AbortSignal) {
+  return request<FlightSeats>(`/api/flights/${encodeURIComponent(flightId)}/seats`, {
+    signal,
+    cache: 'no-store',
+  })
+}
+
+export function createBooking(
+  flightId: string,
+  seatCount: number,
+  idempotencyKey: string,
+  seatNumbers?: readonly string[],
+) {
   return requestBody<{
     data: { booking: Booking }
     meta: { idempotentReplay: boolean }
   }>(
     '/api/bookings',
-    { method: 'POST', body: JSON.stringify({ flightId, seatCount, source: 'UI', idempotencyKey }) },
+    { method: 'POST', body: JSON.stringify({ flightId, seatCount, source: 'UI', idempotencyKey, seatNumbers }) },
     true,
   )
 }

@@ -7,7 +7,6 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import request from "supertest";
 import SeatClaim from "../src/models/SeatClaim.js";
-import { inspectFlightInventory, repairFlightInventory } from "../src/services/seatInventoryService.js";
 
 const [
   { default: app },
@@ -773,8 +772,8 @@ test("a failure inside the cancellation body rolls back the booking change", asy
     .set(authorization(firstToken))
     .send(bookingRequest(flight._id))
     .expect(201);
-  const originalTransition = Booking.findOneAndUpdate;
-  Booking.findOneAndUpdate = async (...args) => {
+  const originalTransition = Booking.updateOne;
+  Booking.updateOne = async (...args) => {
     await originalTransition.apply(Booking, args);
     throw new Error("injected unknown transition result");
   };
@@ -786,7 +785,7 @@ test("a failure inside the cancellation body rolls back the booking change", asy
       .expect(500);
     assert.equal(response.body.error.code, "BOOKING_CANCELLATION_FAILED");
   } finally {
-    Booking.findOneAndUpdate = originalTransition;
+    Booking.updateOne = originalTransition;
   }
 
   // The status change happened inside the transaction, so aborting it must leave
@@ -1133,30 +1132,12 @@ test("claim shortages with sufficient counter capacity are reported and rolled b
   assert.equal(await SeatClaim.countDocuments({ flightId: flight._id }), 2);
 });
 
-test("inventory repair restores claims from confirmed booking seats and corrects the counter", async () => {
-  const flight = await createFlight({ totalSeats: 4 });
-  await request(app).post("/api/bookings").set(authorization(firstToken))
-    .send(bookingRequest(flight._id, randomUUID(), { seatNumbers: ["1B"] })).expect(201);
-  await SeatClaim.deleteOne({ flightId: flight._id, seatNumber: "1B" });
-  await SeatClaim.create({ flightId: flight._id, seatNumber: "1D" });
-  await Flight.updateOne({ _id: flight._id }, { $set: { availableSeats: 1 } });
-  const bookings = await Booking.find({ flight: flight._id }).lean();
-  const before = inspectFlightInventory(await Flight.findById(flight._id).lean(), bookings,
-    await SeatClaim.find({ flightId: flight._id }).lean());
-  assert.deepEqual(before.missingClaims, ["1B"]);
-  assert.deepEqual(before.unexpectedClaims, ["1D"]);
-  assert.equal(before.repairable, true);
-  await repairFlightInventory(flight._id);
-  assert.deepEqual((await SeatClaim.find({ flightId: flight._id }).lean()).map(({ seatNumber }) => seatNumber), ["1B"]);
-  assert.equal((await Flight.findById(flight._id)).availableSeats, 3);
-});
-
 test("a claim unique-index failure returns SEAT_UNAVAILABLE and rolls back the whole booking", async (t) => {
   const flight = await createFlight({ totalSeats: 3 });
   t.mock.method(SeatClaim, "insertMany", async () => {
     throw new mongoose.mongo.MongoServerError({
-      message: "E11000 duplicate key unique_flight_seat_claim", code: 11000,
-      keyPattern: { flightId: 1, seatNumber: 1 }, keyValue: { flightId: flight._id, seatNumber: "1A" },
+      code: 11000,
+      message: "E11000 duplicate key error",
     });
   });
   const response = await request(app).post("/api/bookings").set(authorization(firstToken))

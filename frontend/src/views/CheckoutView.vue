@@ -2,9 +2,7 @@
 import {
   ElAlert,
   ElButton,
-  ElDialog,
   ElForm,
-  ElProgress,
   ElSkeleton,
   ElStep,
   ElSteps,
@@ -22,8 +20,8 @@ import {
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
-import { createBooking, getFlight } from '../api'
-import { demoSeatRows, toggleDemoSeat } from '../checkout'
+import { ApiError, createBooking, getFlight, getFlightSeats } from '../api'
+import { seatRows, toggleSeat } from '../checkout'
 import {
   amountToCents,
   bookingAttempt,
@@ -35,26 +33,25 @@ import {
   type PendingBooking,
 } from '../lib'
 import { useAuthStore } from '../stores/auth'
-import type { Flight } from '../types'
+import type { Flight, FlightSeats } from '../types'
 
 const PENDING_KEY = 'flight-booking-pending-booking'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const flight = ref<Flight | null>(null)
+const seatMap = ref<FlightSeats | null>(null)
 const passengers = computed(() => boundedInteger(route.query.passengers, 1, 9))
 const selected = ref<string[]>([])
-const stage = ref<'seats' | 'holding' | 'payment'>('seats')
-const progress = ref(0)
+const stage = ref<'seats' | 'payment'>('seats')
 const loading = ref(true)
 const submitting = ref(false)
 const error = ref('')
 const paymentError = ref('')
+const seatConflict = ref('')
 const reload = ref(0)
 const pending = ref<PendingBooking | null>(null)
 const heading = ref<HTMLElement | null>(null)
-let timer: ReturnType<typeof setInterval> | undefined
-let completionTimer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
 let active = true
 
@@ -63,23 +60,21 @@ const retrying = computed(
     pending.value?.flightId === flight.value?.id && pending.value?.seatCount === passengers.value,
 )
 const available = computed(() =>
-  Boolean((flight.value && isBookable(flight.value, passengers.value)) || retrying.value),
+  Boolean(
+    flight.value && seatMap.value &&
+    isBookable({ ...flight.value, availableSeats: seatMap.value.availableSeats }, passengers.value),
+  ),
 )
-const rows = computed(() =>
-  flight.value
-    ? demoSeatRows(
-        flight.value.totalSeats,
-        retrying.value
-          ? Math.max(passengers.value, flight.value.availableSeats)
-          : flight.value.availableSeats,
-      )
-    : [],
-)
+const rows = computed(() => seatMap.value ? seatRows(seatMap.value) : [])
+const headers = computed(() => {
+  const columns = seatMap.value?.layout.columns ?? []
+  return [...columns.slice(0, 3), '', ...columns.slice(3)]
+})
 const total = computed(() =>
   centsToAmount(amountToCents(flight.value?.price.amount ?? '0.00') * passengers.value),
 )
-// toggleDemoSeat enforces availability/uniqueness; route changes reset the selection.
 const validSelection = computed(() => selected.value.length === passengers.value)
+const canPay = computed(() => retrying.value || (validSelection.value && available.value))
 
 function readPending(): PendingBooking | null {
   try {
@@ -89,6 +84,12 @@ function readPending(): PendingBooking | null {
       Number.isInteger(value.seatCount) &&
       value.seatCount >= 1 &&
       value.seatCount <= 9 &&
+      (value.seatNumbers === undefined || (
+        Array.isArray(value.seatNumbers) &&
+        value.seatNumbers.length === value.seatCount &&
+        new Set(value.seatNumbers).size === value.seatCount &&
+        value.seatNumbers.every((seat: unknown) => typeof seat === 'string' && /^[1-9]\d*[A-F]$/.test(seat))
+      )) &&
       typeof value.idempotencyKey === 'string' &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
         value.idempotencyKey,
@@ -101,13 +102,7 @@ function readPending(): PendingBooking | null {
   return null
 }
 
-function stopProgress() {
-  clearInterval(timer)
-  clearTimeout(completionTimer)
-}
-
-watch(stage, async (value) => {
-  if (value === 'holding') return
+watch(stage, async () => {
   await nextTick()
   if (!active) return
   window.scrollTo({ top: 0, behavior: 'auto' })
@@ -116,23 +111,32 @@ watch(stage, async (value) => {
 
 watch(
   [() => route.params.flightId, passengers, reload],
-  async (_value, _old, cleanup) => {
+  async ([flightId, count], previous, cleanup) => {
     const controller = new AbortController()
     cleanup(() => controller.abort())
     generation++
-    stopProgress()
+    if (previous?.[0] !== flightId || previous?.[1] !== count) seatConflict.value = ''
     selected.value = []
     stage.value = 'seats'
-    progress.value = 0
     loading.value = true
     error.value = ''
     paymentError.value = ''
     submitting.value = false
     flight.value = null
+    seatMap.value = null
     pending.value = readPending()
     try {
-      const result = await getFlight(String(route.params.flightId), controller.signal)
-      if (!controller.signal.aborted) flight.value = result.flight
+      const [result, map] = await Promise.all([
+        getFlight(String(flightId), controller.signal),
+        getFlightSeats(String(flightId), controller.signal),
+      ])
+      if (controller.signal.aborted) return
+      flight.value = result.flight
+      seatMap.value = map
+      if (retrying.value) {
+        selected.value = [...(pending.value?.seatNumbers ?? [])]
+        stage.value = 'payment'
+      }
     } catch (reason) {
       if (!controller.signal.aborted) error.value = (reason as Error).message
     } finally {
@@ -143,33 +147,26 @@ watch(
 )
 
 function confirmSeats() {
-  if (stage.value !== 'seats') return
-  stage.value = 'holding'
-  progress.value = 0
-  // This animation never reserves server inventory; the booking API runs only at payment.
-  timer = setInterval(() => {
-    progress.value = Math.min(100, progress.value + 10)
-    if (progress.value === 100) {
-      clearInterval(timer)
-      completionTimer = setTimeout(() => {
-        stage.value = 'payment'
-      }, 300)
-    }
-  }, 220)
+  if (stage.value !== 'seats' || !validSelection.value || !available.value) return
+  stage.value = 'payment'
 }
 
 async function pay() {
-  if (stage.value !== 'payment' || submitting.value || !flight.value) return
+  if (stage.value !== 'payment' || submitting.value || !flight.value || !canPay.value) return
   const scope = generation
   const owner = auth.user?.id
-  const attempt = bookingAttempt(readPending(), flight.value.id, passengers.value)
+  const attempt = retrying.value && pending.value
+    ? pending.value
+    : bookingAttempt(readPending(), flight.value.id, passengers.value, selected.value)
   submitting.value = true
   paymentError.value = ''
   try {
     // Persist the key before writing so a timeout or refresh can safely retry the same booking.
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(attempt))
     pending.value = attempt
-    const result = await createBooking(attempt.flightId, attempt.seatCount, attempt.idempotencyKey)
+    const result = await createBooking(
+      attempt.flightId, attempt.seatCount, attempt.idempotencyKey, attempt.seatNumbers,
+    )
     if (!active || scope !== generation || owner !== auth.user?.id) return
     const failure = await router.replace({ path: '/trips', query: { created: result.data.booking.id } })
     if (
@@ -180,8 +177,20 @@ async function pay() {
       sessionStorage.removeItem(PENDING_KEY)
     }
   } catch (reason) {
-    if (active && scope === generation && owner === auth.user?.id)
+    if (!active || scope !== generation || owner !== auth.user?.id) return
+    if (reason instanceof ApiError && reason.status === 409 &&
+      ['SEAT_UNAVAILABLE', 'FLIGHT_NOT_FOUND_OR_SOLD_OUT'].includes(reason.code)) {
+      if (readPending()?.idempotencyKey === attempt.idempotencyKey) {
+        sessionStorage.removeItem(PENDING_KEY)
+      }
+      pending.value = null
+      seatConflict.value = reason.code === 'SEAT_UNAVAILABLE'
+        ? 'Someone booked one of your selected seats. Please choose again.'
+        : 'Availability changed. Please check the updated seat map.'
+      reload.value++
+    } else {
       paymentError.value = (reason as Error).message
+    }
   } finally {
     if (scope === generation) submitting.value = false
   }
@@ -190,7 +199,6 @@ async function pay() {
 onBeforeUnmount(() => {
   active = false
   generation++
-  stopProgress()
 })
 </script>
 
@@ -222,21 +230,28 @@ onBeforeUnmount(() => {
           : `Select ${passengers} seat${passengers === 1 ? '' : 's'} for your trip.` }}
       </p>
       <ElSteps
-        :active="stage === 'seats' ? 0 : stage === 'holding' ? 1 : 2"
+        :active="stage === 'seats' ? 0 : 1"
         finish-status="finish"
         align-center
         class="my-7 [&_.is-process]:text-blue-700! [&_.is-process]:border-blue-700!"
       >
         <ElStep title="Seats" :icon="Armchair" />
-        <ElStep title="Reserve" :icon="LoaderCircle"/>
         <ElStep title="Payment" :icon="CreditCard" />
       </ElSteps>
       <ElAlert
-        v-if="!available"
+        v-if="!available && !retrying"
         title="This flight is unavailable for the selected travelers."
         type="warning"
         :closable="false"
         class="mb-5"
+      />
+      <ElAlert
+        v-if="seatConflict && stage === 'seats'"
+        :title="seatConflict"
+        type="warning"
+        :closable="false"
+        class="mb-5"
+        role="alert"
       />
       <ElAlert
         v-if="retrying"
@@ -250,17 +265,14 @@ onBeforeUnmount(() => {
           v-if="stage !== 'payment'"
           class="min-w-0 rounded-2xl border border-slate-200 bg-surface p-4 shadow-sm sm:p-6"
         >
-          <h2 class="text-xl font-semibold">Demo cabin</h2>
-          <p class="mt-2 text-xs leading-5 text-slate-500">
-            Illustrative seat map. Seats are not assigned by the airline.
-          </p>
+          <h2 class="text-xl font-semibold">Seat map</h2>
           <div class="mx-auto mt-5 max-w-sm">
             <div
               class="grid grid-cols-7 gap-1.5 overflow-y-auto pb-2 pr-1 text-center text-sm
                text-slate-500 [scrollbar-gutter:stable]"
               aria-hidden="true"
             >
-              <span v-for="letter in ['A', 'B', 'C', '', 'D', 'E', 'F']" :key="letter">
+              <span v-for="letter in headers" :key="letter">
                 {{ letter }}
               </span>
             </div>
@@ -268,7 +280,7 @@ onBeforeUnmount(() => {
               class="max-h-[min(360px,45dvh)] overflow-y-auto overscroll-contain pr-1
                [scrollbar-gutter:stable] sm:max-h-[400px]"
               role="group"
-              aria-label="Demo seat map"
+              aria-label="Seat map"
             >
               <div
                 v-for="(row, rowIndex) in rows"
@@ -293,7 +305,7 @@ onBeforeUnmount(() => {
                     "
                     :aria-label="`Seat ${seat.id}${!seat.available ? ', unavailable' : ''}`"
                     :aria-pressed="selected.includes(seat.id)"
-                    @click="selected = toggleDemoSeat(selected, seat, passengers)"
+                    @click="selected = toggleSeat(selected, seat, passengers)"
                     >
                     <component
                       :is="!seat.available ? X : selected.includes(seat.id) ? Check : Armchair"
@@ -336,8 +348,8 @@ onBeforeUnmount(() => {
             No card details or real payment are required.
           </p>
           <ElAlert
-            title="Demo seat selection complete"
-            :description="`Selected seats: ${selected.join(', ')}`"
+            title="Seat selection complete"
+            :description="selected.length ? `Selected seats: ${selected.join(', ')}` : 'Seats are assigned when this booking is confirmed.'"
             type="success"
             :closable="false"
             :show-icon="true"
@@ -400,27 +412,25 @@ onBeforeUnmount(() => {
               class="hidden! lg:inline-flex!"
               :loading="submitting"
               :loading-icon="LoaderCircle"
-              :disabled="submitting || !validSelection || !available"
+              :disabled="submitting || !canPay"
               >{{ submitting ? 'Confirming booking…' : 'Complete simulated payment' }}
             </ElButton>
-            <ElButton class="m-0!" :disabled="submitting" @click="stage = 'seats'">
+            <ElButton v-if="!retrying" class="m-0!" :disabled="submitting" @click="stage = 'seats'">
               Change seats
             </ElButton>
             <RouterLink
-              v-if="paymentError"
+              v-if="paymentError || retrying"
               class="text-center text-sm text-blue-700 underline"
               to="/trips"
               >Check My trips
             </RouterLink>
           </ElForm>
           <p class="mt-5 text-xs leading-5 text-slate-500">
-            Seat selection and payment are simulated. No money is charged. Your booking is created
-            when you finish payment.
+            Payment is simulated. Your seats are booked when you complete payment.
           </p>
         </aside>
       </div>
       <div
-        v-if="stage !== 'holding'"
         class="fixed inset-x-0 bottom-0 z-40 flex flex-wrap items-center justify-between gap-3
          border-t border-slate-200 bg-surface p-4 shadow-lg max-[380px]:[&>button]:w-full lg:hidden"
       >
@@ -442,30 +452,11 @@ onBeforeUnmount(() => {
           type="primary"
           :loading="submitting"
           :loading-icon="LoaderCircle"
-          :disabled="submitting || !validSelection || !available"
+          :disabled="submitting || !canPay"
           @click="pay"
           >{{ submitting ? 'Confirming…' : 'Complete simulated payment' }}
         </ElButton>
       </div>
     </section>
-    <ElDialog
-      :model-value="stage === 'holding'"
-      title="Reserving demo seats…"
-      width="min(440px, calc(100vw - 32px))"
-      align-center
-      :show-close="false"
-      :close-on-click-modal="false"
-      :close-on-press-escape="false"
-    >
-      <p class="mb-5 text-sm text-slate-500">Selected seats: {{ selected.join(', ') }}</p>
-      <ElProgress
-        :percentage="progress"
-        :stroke-width="10"
-        aria-label="Simulated seat reservation progress"
-      />
-      <p class="mt-5 text-xs leading-5 text-slate-500" role="status">
-        Simulation only. Availability is checked when you finish booking.
-      </p>
-    </ElDialog>
   </AppShell>
 </template>

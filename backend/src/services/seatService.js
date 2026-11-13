@@ -62,9 +62,7 @@ export async function allocateSeats(flight, input, session) {
 
   if (input.seatNumbers !== undefined) {
     if (
-      input.seatNumbers.some(
-        (seat) => !isValidSeatNumber(seat, flight.totalSeats),
-      )
+      input.seatNumbers.some((seat) => !isValidSeatNumber(seat, flight.totalSeats))
     ) {
       throw invalidRequest([
         {

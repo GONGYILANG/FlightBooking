@@ -40,11 +40,20 @@ export interface Flight {
   status: FlightStatus
 }
 
+export interface FlightSeats {
+  flightId: string
+  totalSeats: number
+  availableSeats: number
+  layout: { columns: string[] }
+  claimedSeatNumbers: string[]
+}
+
 export interface Booking {
   id: string
   bookingReference: string
   flight: Flight
   seatCount: number
+  seatNumbers: string[]
   pricing: { unitAmount: string; totalAmount: string; currency: string }
   source: BookingSource
   status: BookingStatus

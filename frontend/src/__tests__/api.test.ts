@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import {
   ApiError, cancelBooking, createBooking, deleteChat, getBooking, getChatSession,
-  getFlight, getHealth, getMe, listAirlines, listBookings, listChatSessions, login,
+  getFlight, getFlightSeats, getHealth, getMe, listAirlines, listBookings, listChatSessions, login,
   logout, register, request, requestBody, searchAirports, searchFlights, sendChat,
   setAccessToken, setUnauthorizedHandler,
 } from '../api.ts'
@@ -116,10 +116,23 @@ test('cancel uses PATCH and the bearer token', async () => {
   assert.equal(new Headers(request?.init.headers).get('Authorization'), 'Bearer jwt-value')
 })
 
-test('booking creation preserves data and idempotent replay metadata', async () => {
+test('seat map refresh reads the flight seats endpoint without a cached result', async () => {
+  const data = { flightId: 'flight', claimedSeatNumbers: ['1A'] }
+  const captured = mockJson({ data })
+  const { signal } = new AbortController()
+  assert.deepEqual(await getFlightSeats('flight', signal), data)
+  assert.equal(captured()?.path, '/api/flights/flight/seats')
+  assert.equal(captured()?.init.cache, 'no-store')
+  assert.equal(captured()?.init.signal, signal)
+})
+
+test('booking creation sends selected seats and preserves idempotent replay metadata', async () => {
   const body = { data: { booking: { id: 'booking' } }, meta: { idempotentReplay: true } }
-  mockJson(body)
-  assert.deepEqual(await createBooking('flight', 2, 'request-key'), body)
+  const captured = mockJson(body)
+  assert.deepEqual(await createBooking('flight', 2, 'request-key', ['1A', '2B']), body)
+  assert.deepEqual(JSON.parse(String(captured()?.init.body)), {
+    flightId: 'flight', seatCount: 2, source: 'UI', idempotencyKey: 'request-key', seatNumbers: ['1A', '2B'],
+  })
 })
 
 test('chat preserves structured tool events', async () => {

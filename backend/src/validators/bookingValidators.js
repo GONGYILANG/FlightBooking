@@ -114,10 +114,7 @@ export function validateCreateBooking(request, _response, next) {
     fields.push({ field: "seatCount", message: "seatCount must equal the number of selected seats" });
   }
   const source = parseSource(body.source, fields);
-  const idempotencyKey = parseIdempotencyKey(
-    body.idempotencyKey,
-    fields,
-  );
+  const idempotencyKey = parseIdempotencyKey(body.idempotencyKey, fields);
 
   if (fields.length > 0) {
     throw invalidRequest(fields);

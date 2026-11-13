@@ -1014,17 +1014,9 @@ Grant or remove an administrator role:
 npm run admin:role -- --email admin@example.com --role ADMIN --apply
 ```
 
-Check flight cancellation and booking consistency:
-
-```powershell
-npm run reconcile:admin
-```
-
-Repairs require a maintenance window and `BOOKING_WRITES_PAUSED=true`.
-
 Before enabling seat-aware bookings, cancel/remove old orders using the previous version as planned, then run `npm run indexes` from the backend directory to deploy the claim unique index. No seat initialization script, layout collection, Flight migration, or automatic counter reset is required. Existing flight capacities and available-seat counters remain in use, and empty flights have no claim documents.
 
-`npm run reconcile:bookings` reports counter/claim mismatches, invalid or duplicated order seats, and orphaned records in bounded flight batches without changing inventory. With booking writes actually paused on every API instance and `BOOKING_WRITES_PAUSED=true` set in the script shell, `npm run reconcile:bookings -- --apply` repairs claims and counters from CONFIRMED order seats; invalid capacities, ambiguous orders and orphaned records block repair. Setting the variable in a script shell does not pause another running process. `npm run reconcile:admin -- --apply` also removes claims from cancelled flights. These commands repair an identified mismatch, rather than initializing all flights.
+If cancellation of a flight returns `ADMIN_CONSISTENCY_ERROR` after setting the flight to `CANCELLED`, retry the same cancellation request to finish the booking and seat claim cleanup.
 
 ## Error code reference
 

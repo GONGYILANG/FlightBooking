@@ -72,11 +72,11 @@ test('shared query encoding preserves values and omits unused filters', () => {
   assert.equal(new URLSearchParams(params.toString()).get('q'), 'Hong Kong & Macau')
 })
 
-test('one booking attempt reuses its key until flight or seat count changes', () => {
+test('a booking retry reuses its key for the same seats and gets a new key for a changed selection', () => {
   let next = 0
   const create = () => `key-${++next}`
-  const first = bookingAttempt(null, 'flight-a', 2, create)
-  assert.equal(bookingAttempt(first, 'flight-a', 2, create), first)
-  assert.notEqual(bookingAttempt(first, 'flight-a', 3, create).idempotencyKey, first.idempotencyKey)
+  const first = bookingAttempt(null, 'flight-a', 2, ['1A', '1B'], create)
+  assert.equal(bookingAttempt(first, 'flight-a', 2, ['1B', '1A'], create), first)
+  assert.notEqual(bookingAttempt(first, 'flight-a', 2, ['1A', '1C'], create).idempotencyKey, first.idempotencyKey)
   assert.equal(shiftDate('2026-12-08', 2), '2026-12-10')
 })

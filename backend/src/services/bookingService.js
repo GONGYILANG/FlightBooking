@@ -18,6 +18,8 @@ const BOOKING_CUTOFF_HOURS = 1;
 const BOOKING_CUTOFF_MS = BOOKING_CUTOFF_HOURS * 60 * 60 * 1000;
 
 function bookingCutoffDeadline(now = new Date()) {
+  // return the cutoff deadline, which is one hour after the curret time,
+  // flights departured earlier than this date cannot be booked online.
   return new Date(now.getTime() + BOOKING_CUTOFF_MS);
 }
 
@@ -162,7 +164,7 @@ const transactionOptions = {
   timeoutMS: 10000,
 };
 
-export async function runBookingTransaction(work) {
+async function runBookingTransaction(work) {
   const session = await mongoose.startSession();
   try {
     // The driver retries write conflicts and retries an uncertain commit without
@@ -270,11 +272,7 @@ export async function createBooking(input) {
           idempotentReplay: true,
         };
       }
-      const duplicate = error.writeErrors?.[0]?.err ?? error;
-      if (duplicate.keyPattern?.seatNumber || error.keyPattern?.seatNumber ||
-          error.message?.includes("unique_flight_seat_claim")) {
-        throw serviceError("SEAT_UNAVAILABLE", "One or more selected seats are already occupied", 409);
-      }
+      throw serviceError("SEAT_UNAVAILABLE", "One or more selected seats are already occupied", 409);
     }
 
     if (error?.statusCode) {
@@ -354,7 +352,7 @@ export async function cancelBookingRecord(filter, cancellation) {
         );
       }
 
-      const transitioned = await Booking.findOneAndUpdate(
+      const transition = await Booking.updateOne(
         {
           ...filter,
           status: "CONFIRMED",
@@ -366,23 +364,19 @@ export async function cancelBookingRecord(filter, cancellation) {
             ...cancellation,
           },
         },
-        { returnDocument: "after", runValidators: true, session },
+        { runValidators: true, session },
       );
 
-      if (!transitioned) {
+      if (transition.matchedCount !== 1) {
         throw serviceError("BOOKING_NOT_CANCELLABLE", "Booking is not confirmed", 409);
       }
 
-      if (!transitioned.seatNumbers || transitioned.seatNumbers.length !== transitioned.seatCount ||
-          new Set(transitioned.seatNumbers).size !== transitioned.seatCount) {
-        throw consistencyError({ operation: "CANCEL_SEATS_MISSING", bookingId: transitioned._id, flightId: flight._id });
-      }
       const released = await SeatClaim.deleteMany(
-        { flightId: flight._id, seatNumber: { $in: transitioned.seatNumbers } },
+        { flightId: flight._id, seatNumber: { $in: booking.seatNumbers } },
         { session },
       );
-      if (released.deletedCount !== transitioned.seatCount) {
-        throw consistencyError({ operation: "CANCEL_CLAIMS_MISSING", bookingId: transitioned._id, flightId: flight._id });
+      if (released.deletedCount !== booking.seatCount) {
+        throw consistencyError({ operation: "CANCEL_CLAIMS_MISSING", bookingId: booking._id, flightId: flight._id });
       }
 
       const restoration = await Flight.updateOne(
@@ -391,18 +385,18 @@ export async function cancelBookingRecord(filter, cancellation) {
           status: { $in: bookableFlightStatuses },
           departureAt: { $gt: cancelledAt },
           availableSeats: {
-            $lte: flight.totalSeats - transitioned.seatCount,
+            $lte: flight.totalSeats - booking.seatCount,
           },
         },
-        { $inc: { availableSeats: transitioned.seatCount } },
+        { $inc: { availableSeats: booking.seatCount } },
         { session },
       );
 
       if (restoration.matchedCount !== 1) {
-        // Abort both writes instead of restoring more seats than the flight holds.
+        // Abort the transaction if the inventory count cannot be restored safely.
         throw consistencyError({
           operation: "CANCEL_RESTORE_GUARD_FAILED",
-          bookingId: transitioned._id,
+          bookingId: booking._id,
           flightId: flight._id,
         });
       }
@@ -432,7 +426,6 @@ export async function cancelBookingRecord(filter, cancellation) {
 
 // The caller first closes the flight to new bookings. Cleanup is atomic and retryable.
 export async function cancelFlightBookings({ flight, actorId, reason }) {
-  // API callers enforce the write gate; maintenance callers require writes paused.
   return runBookingTransaction(async (session) => {
     const result = await Booking.updateMany(
       { flight: flight._id, status: "CONFIRMED" },

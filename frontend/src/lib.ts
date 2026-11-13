@@ -4,6 +4,7 @@ export interface PendingBooking {
   flightId: string
   seatCount: number
   idempotencyKey: string
+  seatNumbers?: string[]
 }
 
 // Amounts come from the backend DTO as "123.45" strings; the API contract guarantees the format.
@@ -117,8 +118,14 @@ export function bookingAttempt(
   existing: PendingBooking | null,
   flightId: string,
   seatCount: number,
+  seatNumbers: readonly string[],
   createKey: () => string = () => crypto.randomUUID(),
 ): PendingBooking {
-  if (existing?.flightId === flightId && existing.seatCount === seatCount) return existing
-  return { flightId, seatCount, idempotencyKey: createKey() }
+  if (
+    existing?.flightId === flightId &&
+    existing.seatCount === seatCount &&
+    existing.seatNumbers?.length === seatNumbers.length &&
+    seatNumbers.every((seat) => existing.seatNumbers?.includes(seat))
+  ) return existing
+  return { flightId, seatCount, seatNumbers: [...seatNumbers], idempotencyKey: createKey() }
 }
